@@ -92,6 +92,28 @@
         "title": "%extension.memoAdmin.title%"
       }
     ],
+    "keybindings": [
+      {
+        "command": "extension.memoNew",
+        "key": "ctrl+alt+n",
+        "when": "editorTextFocus || !editorFocus"
+      },
+      {
+        "command": "extension.memoQuick",
+        "key": "ctrl+alt+t",
+        "when": "editorTextFocus || !editorFocus"
+      },
+      {
+        "command": "extension.memoGrep",
+        "key": "ctrl+alt+g",
+        "when": "editorTextFocus || !editorFocus"
+      },
+      {
+        "command": "extension.memoAdmin",
+        "key": "ctrl+alt+m",
+        "when": "editorTextFocus || !editorFocus"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {
@@ -298,19 +320,19 @@
           "description": "%memoAdminUseGradient.desc%"
         },
         "memo-life-for-you.memoAdminOpenMode": {
-          "type": "string",
-          "enum": [
-            "currentWindow",
-            "newWindow"
-          ],
-          "default": "newWindow",
-          "description": "%memoAdminOpenMode.desc%"
-        },
+            "type": "string",
+            "enum": [
+              "currentWindow",
+              "newWindow"
+            ],
+            "default": "newWindow",
+            "markdownDescription": "%memoAdminOpenMode.desc%"
+          },
         "memo-life-for-you.memoAdminOpenOnStartup": {
-          "type": "boolean",
-          "default": false,
-          "description": "%memoAdminOpenOnStartup.desc%"
-        },
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%memoAdminOpenOnStartup.desc%"
+          },
         "memo-life-for-you.openMarkdownPreviewUseMPE": {
           "type": "boolean",
           "default": false,
