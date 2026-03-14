@@ -16,6 +16,7 @@ const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 interface IMemoConfig {
     memodir: string;
     memotemplate: string;
+    memoDatePathFormat: string;
 	editor: string;
 	column: number;
     selectcmd: string;
@@ -114,6 +115,7 @@ export class memoInit {
         let config: IMemoConfig = {
             memodir: process.env.MEMODIR == undefined ? upath.normalize(upath.join(confDir, "_posts")) : process.env.MEMODIR,
             memotemplate: "",
+            memoDatePathFormat: "yyyy/MM",
             editor: process.env.EDITOR == undefined ? "code" : process.env.EDITOR,
             column: 20,
             selectcmd: "peco",

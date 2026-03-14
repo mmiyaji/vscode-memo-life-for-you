@@ -3,13 +3,10 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as upath from 'upath';
-
 import * as nls from 'vscode-nls';
-// import {MDDocumentContentProvider, isMarkdownFile, getMarkdownUri, showPreview} from './MDDocumentContentProvider'
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
-// vscode.QuickPickItem に ln, col, index, filename を追加した items を interface で作成
 export interface items extends vscode.QuickPickItem {
     ln: number;
     col: number;
@@ -22,7 +19,7 @@ export interface items extends vscode.QuickPickItem {
 
 export class memoConfigure {
     public _onDidChange = new vscode.EventEmitter<vscode.Uri>();
-    public _waiting : boolean;
+    public _waiting: boolean;
     public memopath: string;
     public memoaddr: string;
     public memodir: string;
@@ -30,73 +27,69 @@ export class memoConfigure {
     public memoconfdir: string;
     public memoTitlePrefix: string;
     public memoDateFormat: string;
-    public memoISOWeek: boolean = false;
-    public memoEmoji: boolean = false;
-    private memoConfig = [];
+    public memoISOWeek = false;
+    public memoEmoji = false;
     public memoGutterIconPath: string;
     public memoGutterIconSize: string;
-    public memoWithRespectMode: boolean = false;
+    public memoWithRespectMode = false;
     public memoGrepLineBackgroundColor: string;
     public memoGrepKeywordBackgroundColor: string;
     public memoEditPreviewMarkdown: boolean;
     public memoEditOpenMarkdown: boolean;
     public memoEditOpenNewInstance: boolean;
-    public memoEditDispBtime: boolean = false;
+    public memoEditDispBtime = false;
     public memoListSortOrder: string;
     public memoGrepOrder: string;
-    public memoGrepUseRipGrepConfigFile: boolean = false;
+    public memoGrepViewMode: string;
+    public memoGrepUseRipGrepConfigFile = false;
     public memoGrepUseRipGrepConfigFilePath: string;
     public memoTodoUserePattern: string;
     public memoNewFilenameFromClipboard: boolean;
     public memoNewFilenameFromSelection: boolean;
     public memoNewFilNameDateSuffix: string;
+    public memoDatePathFormat: string;
+    public memoAdminAppearance: string;
+    public memoAdminColorTheme: string;
+    public memoDisplayLanguage: string;
+    public memoAdminUseGradient: boolean;
+    public memoAdminOpenMode: string;
+    public memoAdminOpenOnStartup: boolean;
     public openMarkdownPreviewUseMPE: boolean;
     public memoOpenChromeCustomizeURL: string;
     public memoTyporaExecPath: string;
     public memoListDisplayExtname: string[];
-    
+
     public options: vscode.QuickPickOptions = {
         ignoreFocusOut: true,
         matchOnDescription: true,
         matchOnDetail: true,
         placeHolder: ''
-    }
+    };
 
     public cp_options = {
         encoding: 'utf8',
         maxBuffer: 1024 * 1024
-    }
+    };
 
     constructor() {
-        this.init(); // 初期化を同期にしたいので async/await で実行する
-        // this.memoGrepChannel = vscode.window.createOutputChannel("Memo Grep");
+        this.setMemoConfDir();
         this.updateConfiguration();
+        this.safeReadConfig();
         this._waiting = false;
 
         vscode.workspace.onDidChangeConfiguration(() => {
-            // console.log("onDidChangeConfiguration in memoGrep");
             this.updateConfiguration();
         });
 
-        fs.watchFile(upath.normalize(upath.join(this.memoconfdir, 'config.toml')), (curr, prev) => {
-            // console.log(curr);
-            // this.updateConfiguration();
-            this.readConfig();
+        fs.watchFile(upath.normalize(upath.join(this.memoconfdir, 'config.toml')), () => {
+            this.safeReadConfig();
         });
     }
 
-    async init(){
-        await this.setMemoConfDir(); // 初回に memoconfdir が必要なので、createConfig で this.memoconfigdir に値を格納する
-        await this.readConfig();
-    }
-
-    /**
-     * setMemoConfDir
-     */
     public setMemoConfDir() {
-        if (process.platform == "win32") {
+        if (process.platform === "win32") {
             this.memoconfdir = process.env.APPDATA;
-            if (this.memoconfdir == "") {
+            if (this.memoconfdir === "") {
                 this.memoconfdir = upath.normalize(upath.join(process.env.USERPROFILE, "Application Data", "memo"));
             }
             this.memoconfdir = upath.normalize(upath.join(this.memoconfdir, "memo"));
@@ -106,62 +99,52 @@ export class memoConfigure {
         return void 0;
     }
 
-    /**
-     * readConfig
-     */
     public readConfig() {
-        let list = fs.readFileSync(upath.normalize(upath.join(this.memoconfdir, "config.toml"))).toString().split('\n');
+        const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
+        const list = fs.readFileSync(configPath, 'utf8').split('\n');
 
-        // console.log('readConfig =', list);
-        list.forEach((v) => {
-            // 設定と値を split して整形
-            const array = v.split("=").map((v) => {
-                return v.replace(/"/g, "").trim();
-            });
+        list.forEach((line) => {
+            const array = line.split("=").map((value) => value.replace(/"/g, "").trim());
 
-            // console.log(array);
-
-            if (array[0].match(/memodir/)) {
+            if (array[0]?.match(/^memodir$/)) {
                 this.memodir = upath.normalizeTrim(array[1]);
             }
 
-            if (array[0].match(/memotemplate/)) {
-                this.memotemplate = (upath.normalizeTrim(array[1]) === upath.normalizeTrim(".")) ? "" : upath.normalizeTrim(array[1]) ;                    
-                // console.log('memotemplate =', this.memotemplate);
+            if (array[0]?.match(/^memotemplate$/)) {
+                this.memotemplate = (upath.normalizeTrim(array[1]) === upath.normalizeTrim(".")) ? "" : upath.normalizeTrim(array[1]);
             }
 
-            // if (array[0].match(/editor/)) {
-            //     this.editor = upath.normalizeTrim(array[1]);
-            // }
+            if (array[0]?.match(/^memoDatePathFormat$/)) {
+                this.memoDatePathFormat = array[1];
+            }
         });
 
-        // console.log(this.memodir);
-        // console.log(this.memotemplate);
         return void 0;
     }
 
-    /**
-     * checkMemoDir
-     */
+    private safeReadConfig() {
+        const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
+        if (!fs.existsSync(configPath)) {
+            return;
+        }
+
+        this.readConfig();
+    }
+
     public checkMemoDir() {
-        if(!this.memodir) {
+        if (!this.memodir) {
             vscode.window.showErrorMessage(localize('memodirCheck', 'memodir is not set in config.toml'));
             return;
         }
 
-        // memodir に設定されたディレクトりが実際に存在するかチェック
-        try{
+        try {
             fs.statSync(this.memodir);
-        } catch(err) {
-            // console.log(err);
+        } catch {
             vscode.window.showErrorMessage(localize('memodirAccessCheck', 'The directory set in memodir does not exist'));
             return;
         }
     }
 
-    /**
-     * updateConfiguration
-     */
     public updateConfiguration() {
         this.memopath = upath.normalize(vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoPath'));
         this.memoaddr = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('serve-addr');
@@ -178,20 +161,57 @@ export class memoConfigure {
         this.memoEditPreviewMarkdown = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('listMarkdownPreview');
         this.memoEditOpenMarkdown = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openMarkdownPreview');
         this.memoEditOpenNewInstance = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openNewInstance');
-        this.memoListSortOrder = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('listSortOrder'); //birthtime or mtime or filename
+        this.memoListSortOrder = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('listSortOrder');
         this.memoGrepOrder = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('grepOrder');
+        this.memoGrepViewMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoGrepViewMode');
         this.memoGrepUseRipGrepConfigFile = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoGrepUseRipGrepConfigFile');
         this.memoGrepUseRipGrepConfigFilePath = vscode.workspace.getConfiguration('memo-life-for-you').inspect<string>('memoGrepUseRipGrepConfigFilePath').globalValue;
         this.memoTodoUserePattern = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoTodoUserePattern');
         this.memoNewFilenameFromClipboard = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoNewFilenameFromClipboard');
         this.memoNewFilenameFromSelection = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoNewFilenameFromSelection');
         this.memoNewFilNameDateSuffix = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoNewFilNameDateSuffix');
+        this.memoAdminAppearance = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminAppearance');
+        this.memoAdminColorTheme = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminColorTheme');
+        this.memoDisplayLanguage = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoDisplayLanguage');
+        this.memoAdminUseGradient = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminUseGradient');
+        this.memoAdminOpenMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminOpenMode');
+        this.memoAdminOpenOnStartup = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminOpenOnStartup');
         this.openMarkdownPreviewUseMPE = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openMarkdownPreviewUseMPE');
         this.memoOpenChromeCustomizeURL = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('openChromeCustomizeURL');
         this.memoTyporaExecPath = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('TyporaExecPath');
         this.memoListDisplayExtname = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('listDisplayExtname');
         this.memoListDisplayExtname = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('listDisplayExtname');
-        // this.memoconfdir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoconfdir');
+    }
+
+    public updateTomlConfig(values: Record<string, string>) {
+        const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
+        let content = fs.readFileSync(configPath, 'utf8');
+
+        for (const [key, rawValue] of Object.entries(values)) {
+            const escapedValue = rawValue.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const line = `${key} = "${escapedValue}"`;
+            const pattern = new RegExp(`^${key}\\s*=.*$`, 'm');
+
+            if (pattern.test(content)) {
+                content = content.replace(pattern, line);
+            } else {
+                content += `${content.endsWith('\n') ? '' : '\n'}${line}\n`;
+            }
+        }
+
+        fs.writeFileSync(configPath, content, 'utf8');
+        this.safeReadConfig();
+    }
+
+    public ensureBuiltInTemplateFile(): string {
+        const templatePath = upath.normalize(upath.join(this.memoconfdir, 'builtin-template.md'));
+        const content = '# {{.Date}} {{.Title}}\n\n';
+
+        if (!fs.existsSync(templatePath) || fs.readFileSync(templatePath, 'utf8') !== content) {
+            fs.writeFileSync(templatePath, content, 'utf8');
+        }
+
+        return templatePath;
     }
 
     get onDidChange() {

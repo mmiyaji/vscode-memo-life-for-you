@@ -1,6 +1,37 @@
 # vscode-memo-life-for-you README
 
-[Japanese README is here](https://github.com/satokaz/vscode-memo-life-for-you/blob/master/README_ja.md)
+[Japanese README is here](https://github.com/mmiyaji/vscode-memo-life-for-you/blob/master/README_ja.md)
+
+## Fork Note
+
+This repository is a personal fork of [satokaz/vscode-memo-life-for-you](https://github.com/satokaz/vscode-memo-life-for-you), customized for a daily memo workflow.
+
+## Install
+
+This fork is distributed as a `.vsix` file from the [GitHub Releases](https://github.com/mmiyaji/vscode-memo-life-for-you/releases) page.
+
+1. Download the latest `.vsix` from Releases.
+2. Open VS Code.
+3. Run `Extensions: Install from VSIX...` from the Command Palette.
+4. Select the downloaded `.vsix` file.
+
+If you want to start directly in the memo admin workflow, open the generated `.code-workspace` file with VS Code after installation.
+
+## Customization Summary
+
+The current custom changes include:
+
+* Memo save path organization by date-based folders such as `yyyy/MM`
+* Search scope selection and optional text-style grep result output
+* Memo Admin screen for daily operations, recent history, and core config editing
+* Workspace file generation for admin-startup workflows
+* Additional admin themes, multilingual admin UI, and VS Code theme-follow behavior
+
+### Memo Admin
+
+Admin dashboard for daily memo operations and quick access to recent files.
+
+![Memo Admin dashboard](https://raw.githubusercontent.com/mmiyaji/vscode-memo-life-for-you/master/media/memo-admin-dashboard.png)
 
 This extension is for writing notes in the markdown format to the VS code.
 Notes are placed in a single directory and are managed with filename based on date.

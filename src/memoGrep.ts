@@ -6,11 +6,13 @@ import * as upath from 'upath';
 import * as nls from 'vscode-nls';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as dateFns from 'date-fns';
 import { items, memoConfigure } from './memoConfigure';
+import { getMemoDateDirectory, getMemoRelativeDirectoryLabel } from './memoPath';
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
-export class memoGrep extends memoConfigure  {
+export class memoGrep extends memoConfigure {
     private _disposable: vscode.Disposable;
     private memoGrepChannel: vscode.OutputChannel;
 
@@ -19,296 +21,370 @@ export class memoGrep extends memoConfigure  {
         this.memoGrepChannel = vscode.window.createOutputChannel("Memo Grep");
     }
 
-    /**
-     * Grep
-     * Implementation using bundled ripgrep
-     * macOS: /Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/node_modules/vscode-ripgrep/bin/rg
-     * win32:
-     * Linux:
-    */
-    public Grep() {
+    public async Grep() {
         let items: items[] = [];
         let list: string[] = [];
         let grepLineDecoration: vscode.TextEditorDecorationType;
         let grepKeywordDecoration: vscode.TextEditorDecorationType;
-        let rgPath: string;
         let args: string[];
-        let result: string = ""; // "" で初期化しておかないと result += hoge で先頭に undefined が入ってしまう
+        let result = "";
         let child: cp.ChildProcess;
 
-        // ASAR
-        console.log(vscode.version);
-
-        if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules","@vscode")))) {
-            rgPath = upath.normalize(upath.join(vscode.env.appRoot, "node_modules", "@vscode", "ripgrep", "bin", "rg"));
-        } else if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked")))) {
-            // vscode 1.64 or later 
-            if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked", "@vscode")))) {
-                rgPath = upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked", "@vscode", "ripgrep", "bin", "rg"));
-            } else {
-                // vscode 1.21 to 1.63
-                rgPath = upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked", "vscode-ripgrep", "bin", "rg"));
-            }
-        } else if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules")))) {
-            // vscode 12.0
-            rgPath = upath.normalize(upath.join(vscode.env.appRoot, "node_modules", "vscode-ripgrep", "bin", "rg"));
-        }
-
+        const rgPath = this.resolveRipgrepPath();
         this.readConfig();
 
-        // console.log('memoGrepUseRipGrepConfigFilePath =', this.memoGrepUseRipGrepConfigFilePath);
+        const searchRoot = await this.pickSearchRoot();
+        if (!searchRoot) {
+            return;
+        }
 
-        vscode.window.showInputBox({
+        const keyword = await vscode.window.showInputBox({
             placeHolder: localize('grepEnterKeyword', 'Please enter a keyword'),
             prompt: localize('grepEnterKeyword', 'Please enter a keyword...'),
             ignoreFocusOut: true
-        }).then(async (keyword) => {
-            // console.log('name =', keyword);
-            
-            // ESC が押された、何も入力されずに Enter された場合はキャンセル
-            if(keyword == undefined || keyword == "") { 
-                return void 0;
-            }
+        });
 
-        // Progress
-            vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: localize('grepStart', "Start search..."),
-                cancellable: true,
-            }, async (progress, token) => {
-                token.onCancellationRequested(() => {
-                    if (child) {
-                        child.kill();
-                    }
+        if (keyword === undefined || keyword === "") {
+            return;
+        }
+
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: localize('grepStart', "Start search..."),
+            cancellable: true,
+        }, async (progress, token) => {
+            token.onCancellationRequested(() => {
+                if (child) {
+                    child.kill();
+                }
+            });
+
+            return new Promise<void>((resolve, reject) => {
+                progress.report({
+                    message: localize('grepProgress', "Searching for keyword: {0}...", keyword)
                 });
-                return new Promise<void>((resolve, reject) => {
-                    progress.report({ message: localize('grepProgress', "Searching for keyword: {0}...", keyword)});
-                    // progress.report({ increment: 100 });
 
-                    // console.log('memoGrepUseRipGrepConfigFile =', this.memoGrepUseRipGrepConfigFile);
-                    // console.log('memoGrepUseRipGrepConfigFilePath =', this.memoGrepUseRipGrepConfigFilePath);
-
-                    if (this.memoGrepUseRipGrepConfigFile) {
-                        if (this.memoGrepUseRipGrepConfigFilePath == undefined) {
-                            process.env.RIPGREP_CONFIG_PATH = upath.normalize(upath.join(os.homedir(), '.ripgreprc'));
-                            // console.log('use', path.normalize(path.join(os.homedir(), '.ripgreprc')));
-                        } else {
-                            if (fs.existsSync(upath.normalize(this.memoGrepUseRipGrepConfigFilePath))){
-                                process.env.RIPGREP_CONFIG_PATH = upath.normalize(this.memoGrepUseRipGrepConfigFilePath);
-                            } else {
-                                vscode.window.showErrorMessage(`${this.memoGrepUseRipGrepConfigFilePath}` + " No such file or directory");
-                                return;
-                            }
-                        }
-                        // console.log('memoGrep =', process.env.RIPGREP_CONFIG_PATH);
-                        args = [];
-                        child = cp.spawn(rgPath, args.concat([keyword]).concat([this.memodir]), {
-                                        stdio: ['inherit'],
-                                        cwd: this.memodir
-                                    });
+                if (this.memoGrepUseRipGrepConfigFile) {
+                    if (this.memoGrepUseRipGrepConfigFilePath === undefined) {
+                        process.env.RIPGREP_CONFIG_PATH = upath.normalize(upath.join(os.homedir(), '.ripgreprc'));
+                    } else if (fs.existsSync(upath.normalize(this.memoGrepUseRipGrepConfigFilePath))) {
+                        process.env.RIPGREP_CONFIG_PATH = upath.normalize(this.memoGrepUseRipGrepConfigFilePath);
                     } else {
-                        process.env.RIPGREP_CONFIG_PATH = ''; // unset
-                        // console.log('memoGrep =', process.env.RIPGREP_CONFIG_PATH);
-                        // 
-                        //ripgrep のオプションを組み立てる。
-                        //検索対象となるファイルは、memoListDisplayExtname 設定で指定されている拡張子を対象とする
-                        //
-                        args = ['--vimgrep', '--color', 'never', '-S'];
-                        for (let i = 0; i < this.memoListDisplayExtname.length; i++) {
-                            args.push('-g', '*.' + this.memoListDisplayExtname[i]);
-                        }
-
-                        child = cp.spawn(rgPath, args.concat([keyword]).concat([this.memodir]), {
-                                        stdio: ['inherit'],
-                                        cwd: this.memodir
-                                    });
+                        vscode.window.showErrorMessage(`${this.memoGrepUseRipGrepConfigFilePath} No such file or directory`);
+                        reject();
+                        return;
                     }
-                        
-                    child.stdout.setEncoding('utf-8');
-                    child.stdout.on("data", (message) => {
-                        // console.log('stdout =', message);
 
-                        result += message;
+                    args = [];
+                } else {
+                    process.env.RIPGREP_CONFIG_PATH = '';
+                    args = ['--vimgrep', '--color', 'never', '-S'];
+                    for (const extname of this.memoListDisplayExtname) {
+                        args.push('-g', `*.${extname}`);
+                    }
+                }
 
-                        // console.log('result.length =', result);
-                        // console.log('result.length =', result.length);
-                        
-                        // console.log('result.length =', result.split('\n').length);
-                        if (result.split('\n').length > 10000) {
-
-                            child.stdout.removeAllListeners();
-
-                            list = result.split('\n').sort(function(a, b) {
-                                return (a < b ? 1 : -1);
-                            });
-                            
-                            vscode.window.showInformationMessage(localize('grepResultMax', 'Search result exceeded 10000. Please enter a more specific search pattern and narrow down the search results'));
-                            // vscode.window.showErrorMessage(child.stderr.toString());
-                            resolve();
-                        }
-                    });
-
-                    child.stderr.setEncoding('utf-8');
-                    child.stderr.on("data", (message) => {
-                        vscode.window.showErrorMessage(message.toString());
-                        // console.log(message);
-                    });
-
-                    child.on("close", async (code) => {
-                        // console.log(code);
-                        // console.log(result);
-                        if (code == 0) {
-                            list = result.split('\n').sort(function(a, b) {
-                                return (a < b ? 1 : -1);
-                            });
-                            resolve();
-                        } else {
-                            list = [];
-                            vscode.window.showWarningMessage(localize('grepNoResult', 'No keywords found'));
-                            reject();
-                        }
-                    });
-
+                child = cp.spawn(rgPath, args.concat([keyword, searchRoot]), {
+                    stdio: ['inherit'],
+                    cwd: searchRoot
                 });
-            }).then(() => {
-            // console.log('result =', list);
+
+                child.stdout?.setEncoding('utf-8');
+                child.stdout?.on("data", (message) => {
+                    result += message;
+
+                    if (result.split('\n').length > 10000) {
+                        child.stdout?.removeAllListeners();
+                        list = result.split('\n').sort((a, b) => (a < b ? 1 : -1));
+                        vscode.window.showInformationMessage(localize('grepResultMax', 'Search result exceeded 10000. Please enter a more specific search pattern and narrow down the search results'));
+                        resolve();
+                    }
+                });
+
+                child.stderr?.setEncoding('utf-8');
+                child.stderr?.on("data", (message) => {
+                    vscode.window.showErrorMessage(message.toString());
+                });
+
+                child.on("close", async (code) => {
+                    if (code === 0) {
+                        list = result.split('\n').sort((a, b) => (a < b ? 1 : -1));
+                        resolve();
+                    } else {
+                        list = [];
+                        vscode.window.showWarningMessage(localize('grepNoResult', 'No keywords found'));
+                        reject();
+                    }
+                });
+            });
+        }).then(() => {
             list.forEach((vlist, index) => {
-                if (vlist == '') {
+                if (vlist === '') {
                     return;
                 }
-                // console.log(vlist);
 
-                let filename: string = vlist.match((process.platform == "win32") ? /^(.*?)(?=:).(.*?)(?=:)/gm : /^(.*?)(?=:)/gm).toString();;
-                // console.log("filename =", filename);
+                const filename = vlist.match((process.platform === "win32") ? /^(.*?)(?=:).(.*?)(?=:)/gm : /^(.*?)(?=:)/gm)?.toString();
+                if (!filename) {
+                    return;
+                }
 
-                let line: number = Number(vlist.replace((process.platform == "win32") ? /^(.*?)(?=:).(.*?)(?=:)/gm : /^(.*?)(?=:)/gm, "")
-                .replace(/^:/gm, "").match(/^(.*?)(?=:)/gm).toString());
-                // console.log("line =", line);
+                const line = Number(vlist.replace((process.platform === "win32") ? /^(.*?)(?=:).(.*?)(?=:)/gm : /^(.*?)(?=:)/gm, "")
+                    .replace(/^:/gm, "").match(/^(.*?)(?=:)/gm)?.toString());
 
-                let col: number = Number(vlist.replace((process.platform == "win32") ? /^(.*?)(?=:).(.*?)(?=:)/gm : /^(.*?)(?=:)/gm, "")
-                .replace(/^:/gm, "").replace(/^(.*?)(?=:)/gm, "").replace(/^:/gm, "").match(/^(.*?)(?=:)/gm).toString());
-                // console.log("col =", col);
+                const col = Number(vlist.replace((process.platform === "win32") ? /^(.*?)(?=:).(.*?)(?=:)/gm : /^(.*?)(?=:)/gm, "")
+                    .replace(/^:/gm, "").replace(/^(.*?)(?=:)/gm, "").replace(/^:/gm, "").match(/^(.*?)(?=:)/gm)?.toString());
 
-                let result = vlist.replace((process.platform == "win32") ? /^(.*?)(?=:).(.*?)(?=:).(.*?)(?=:).(.*?)(?=:):/gm : /^(.*?)(?=:).(.*?)(?=:).(.*?)(?=:):/gm, "").toString();
-                // console.log("result =", result);
+                const lineResult = vlist.replace((process.platform === "win32") ? /^(.*?)(?=:).(.*?)(?=:).(.*?)(?=:).(.*?)(?=:):/gm : /^(.*?)(?=:).(.*?)(?=:).(.*?)(?=:):/gm, "").toString();
 
                 items.push({
-                    "label": localize('grepResultLabel', '{0} - $(location) Ln:{1} Col:{2}', index, line, col),
-                    "description": `$(eye) ` + result,
-                    "detail": `$(calendar) ` + upath.basename(filename),
-                    "ln": line,
-                    "col": col,
-                    "index": index,
-                    "filename": filename,
-                    "isDirectory": false,
-                    "birthtime": null,
-                    "mtime": null
+                    label: localize('grepResultLabel', '{0} - $(location) Ln:{1} Col:{2}', index, line, col),
+                    description: `$(eye) ${lineResult}`,
+                    detail: `$(calendar) ${upath.basename(filename)}`,
+                    ln: line,
+                    col,
+                    index,
+                    filename,
+                    isDirectory: false,
+                    birthtime: null,
+                    mtime: null
                 });
 
-                this.memoGrepChannel.appendLine(`${index}: ` + 'file://' + filename + (process.platform == 'linux' ? ":" : "#") + line + ':' + col );
-                // this.memoGrepChannel.appendLine(result);
+                this.memoGrepChannel.appendLine(`${index}: file://${filename}${process.platform === 'linux' ? ":" : "#"}${line}:${col}`);
                 this.memoGrepChannel.appendLine(vlist.replace(/^(.*?)(?=:)/gm, '').replace(/^:/g, 'Line ').toString());
                 this.memoGrepChannel.appendLine('');
             });
+
+            if (this.memoGrepViewMode === 'outputChannel' || this.memoGrepViewMode === 'both') {
+                this.showResultsInOutputChannel(keyword, searchRoot, items.length, list);
+                if (this.memoGrepViewMode === 'outputChannel') {
+                    return;
+                }
+            }
 
             vscode.window.showQuickPick<items>(items, {
                 ignoreFocusOut: true,
                 matchOnDescription: true,
                 matchOnDetail: true,
-                placeHolder: localize('grepResult', 'grep Result: {0} ... (Number of results: {1})', keyword, items.length),
+                placeHolder: `${localize('grepResult', 'grep Result: {0} ... (Number of results: {1})', keyword, items.length)} [${getMemoRelativeDirectoryLabel(this.memodir, searchRoot)}]`,
                 onDidSelectItem: async (selected: items) => {
-                    if (selected == undefined || selected == null ) {
-                        grepLineDecoration.dispose();
-                        grepKeywordDecoration.dispose();
+                    if (!selected) {
+                        grepLineDecoration?.dispose();
+                        grepKeywordDecoration?.dispose();
                         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                        return void 0;
+                        return;
                     }
-                    // console.log('selected.label =', selected.label);
-                    // console.log('selected =', selected)
 
                     vscode.workspace.openTextDocument(selected.filename).then(document => {
                         vscode.window.showTextDocument(document, {
                             viewColumn: 1,
                             preserveFocus: true,
                             preview: true
-                        }).then(document => {
-                            // カーソルを目的の行に移動させて表示する為の処理
+                        }).then(() => {
                             const editor = vscode.window.activeTextEditor;
                             const position = editor.selection.active;
-                            const newPosition = position.with(Number(selected.ln) - 1 , Number(selected.col) -1);
-                            // カーソルで選択 (ここでは、まだエディタ上で見えない)
+                            const newPosition = position.with(Number(selected.ln) - 1, Number(selected.col) - 1);
                             editor.selection = new vscode.Selection(newPosition, newPosition);
 
-                            // highlight decoration
-                            if (grepLineDecoration && grepKeywordDecoration) {
-                                grepLineDecoration.dispose();
-                                grepKeywordDecoration.dispose();
-                            }
+                            grepLineDecoration?.dispose();
+                            grepKeywordDecoration?.dispose();
 
-                            let startPosition = new vscode.Position(Number(selected.ln) - 1 , 0);
-                            let endPosition = new vscode.Position(Number(selected.ln), 0);
-
-                            // Line Decoration
-                            grepLineDecoration = vscode.window.createTextEditorDecorationType( <vscode.DecorationRenderOptions> {
+                            const startPosition = new vscode.Position(Number(selected.ln) - 1, 0);
+                            grepLineDecoration = vscode.window.createTextEditorDecorationType(<vscode.DecorationRenderOptions>{
                                 isWholeLine: true,
-                                gutterIconPath: this.memoWithRespectMode == true ? upath.join(__filename, '..', '..', '..', 'resources', 'Q2xhdWRpYVNEM3gxNjA=.png')
+                                gutterIconPath: this.memoWithRespectMode === true ? upath.join(__filename, '..', '..', '..', 'resources', 'Q2xhdWRpYVNEM3gxNjA=.png')
                                     : (this.memoGutterIconPath ? this.memoGutterIconPath
                                     : upath.join(__filename, '..', '..', '..', 'resources', 'sun.svg')),
                                 gutterIconSize: this.memoGutterIconSize ? this.memoGutterIconSize : '100% auto',
                                 backgroundColor: this.memoGrepLineBackgroundColor
                             });
-                            // Keyword Decoration
-                            let startKeywordPosition = new vscode.Position(Number(selected.ln) - 1, Number(selected.col) - 1);
-                            let endKeywordPosition = new vscode.Position(Number(selected.ln) -1, Number(selected.col) + keyword.length - 1);
-                            grepKeywordDecoration = vscode.window.createTextEditorDecorationType( <vscode.DecorationRenderOptions> {
+
+                            const startKeywordPosition = new vscode.Position(Number(selected.ln) - 1, Number(selected.col) - 1);
+                            const endKeywordPosition = new vscode.Position(Number(selected.ln) - 1, Number(selected.col) + keyword.length - 1);
+                            grepKeywordDecoration = vscode.window.createTextEditorDecorationType(<vscode.DecorationRenderOptions>{
                                 isWholeLine: false,
                                 backgroundColor: this.memoGrepKeywordBackgroundColor
                             });
+
                             editor.setDecorations(grepLineDecoration, [new vscode.Range(startPosition, startPosition)]);
                             editor.setDecorations(grepKeywordDecoration, [new vscode.Range(startKeywordPosition, endKeywordPosition)]);
-
-                            // カーソル位置までスクロール
                             editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
-                        }).then(() => {
-
                         });
                     });
                 }
-            }).then((selected) => {   // When selected with the mouse
-                if (selected == undefined || selected == null) {
-                    grepLineDecoration.dispose();
-                    grepKeywordDecoration.dispose();
+            }).then((selected) => {
+                if (!selected) {
+                    grepLineDecoration?.dispose();
+                    grepKeywordDecoration?.dispose();
                     vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                    return void 0;
+                    return;
                 }
+
                 vscode.workspace.openTextDocument(selected.filename).then(document => {
                     vscode.window.showTextDocument(document, {
                         viewColumn: 1,
                         preserveFocus: true,
                         preview: true
-                    }).then(document => {
-                        // カーソルを目的の行に移動させて表示する為の処理
+                    }).then(() => {
                         const editor = vscode.window.activeTextEditor;
                         const position = editor.selection.active;
-                        const newPosition = position.with(Number(selected.ln) - 1 , Number(selected.col) -1);
-                        // カーソルで選択 (ここでは、まだエディタ上で見えない)
+                        const newPosition = position.with(Number(selected.ln) - 1, Number(selected.col) - 1);
                         editor.selection = new vscode.Selection(newPosition, newPosition);
-                        // カーソル位置までスクロール
                         editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
                     });
                 }).then(() => {
-                    // ファイルを選択した後に、decoration を消す
-                    setTimeout(() => { 
-                        grepLineDecoration.dispose();
-                        grepKeywordDecoration.dispose();
+                    setTimeout(() => {
+                        grepLineDecoration?.dispose();
+                        grepKeywordDecoration?.dispose();
                     }, 500);
                 });
             });
-            });
+        }, () => undefined);
+    }
+
+    private resolveRipgrepPath(): string {
+        if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules", "@vscode")))) {
+            return upath.normalize(upath.join(vscode.env.appRoot, "node_modules", "@vscode", "ripgrep", "bin", "rg"));
+        }
+
+        if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked")))) {
+            if (fs.existsSync(upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked", "@vscode")))) {
+                return upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked", "@vscode", "ripgrep", "bin", "rg"));
+            }
+
+            return upath.normalize(upath.join(vscode.env.appRoot, "node_modules.asar.unpacked", "vscode-ripgrep", "bin", "rg"));
+        }
+
+        return upath.normalize(upath.join(vscode.env.appRoot, "node_modules", "vscode-ripgrep", "bin", "rg"));
+    }
+
+    private async pickSearchRoot(): Promise<string | undefined> {
+        const currentYearDir = getMemoDateDirectory(this.memodir, 'yyyy');
+        const currentMonthDir = getMemoDateDirectory(this.memodir, 'yyyy/MM');
+        const directoryItems = this.listDirectories(this.memodir).map((folder, index) => ({
+            label: getMemoRelativeDirectoryLabel(this.memodir, folder),
+            description: folder,
+            detail: localize('grepScopeFolder', 'Select this folder as search scope'),
+            ln: null,
+            col: null,
+            index,
+            filename: folder,
+            isDirectory: true,
+            birthtime: null,
+            mtime: null
+        }));
+
+        const scopeItems: items[] = [
+            {
+                label: localize('grepScopeAll', 'All memos'),
+                description: this.memodir,
+                detail: localize('grepScopeAllDetail', 'Search all memo files'),
+                ln: null,
+                col: null,
+                index: -1,
+                filename: this.memodir,
+                isDirectory: true,
+                birthtime: null,
+                mtime: null
+            },
+            {
+                label: localize('grepScopeYear', 'This year'),
+                description: dateFns.format(new Date(), 'yyyy'),
+                detail: fs.existsSync(currentYearDir) ? currentYearDir : localize('grepScopeMissing', 'Folder does not exist yet'),
+                ln: null,
+                col: null,
+                index: -2,
+                filename: currentYearDir,
+                isDirectory: true,
+                birthtime: null,
+                mtime: null
+            },
+            {
+                label: localize('grepScopeMonth', 'This month'),
+                description: dateFns.format(new Date(), 'yyyy/MM'),
+                detail: fs.existsSync(currentMonthDir) ? currentMonthDir : localize('grepScopeMissing', 'Folder does not exist yet'),
+                ln: null,
+                col: null,
+                index: -3,
+                filename: currentMonthDir,
+                isDirectory: true,
+                birthtime: null,
+                mtime: null
+            },
+            {
+                label: localize('grepScopeChooseFolder', 'Choose subfolder'),
+                description: localize('grepScopeChooseFolderDescription', 'Pick a child folder under memodir'),
+                detail: localize('grepScopeChooseFolderDetail', 'Useful for narrowing search to yyyy/MM or custom folders'),
+                ln: null,
+                col: null,
+                index: -4,
+                filename: this.memodir,
+                isDirectory: true,
+                birthtime: null,
+                mtime: null
+            }
+        ];
+
+        const selected = await vscode.window.showQuickPick<items>(scopeItems, {
+            ignoreFocusOut: true,
+            placeHolder: localize('grepScopePlaceholder', 'Choose the search scope')
         });
+
+        if (!selected) {
+            return undefined;
+        }
+
+        if (selected.index === -4) {
+            const directory = await vscode.window.showQuickPick<items>(directoryItems, {
+                ignoreFocusOut: true,
+                matchOnDescription: true,
+                matchOnDetail: true,
+                placeHolder: localize('grepScopeChooseFolder', 'Choose subfolder')
+            });
+            return directory?.filename;
+        }
+
+        if (!fs.existsSync(selected.filename)) {
+            vscode.window.showWarningMessage(localize('grepScopeMissing', 'Folder does not exist yet'));
+            return undefined;
+        }
+
+        return selected.filename;
+    }
+
+    private listDirectories(dir: string, result: string[] = []): string[] {
+        const dirents = fs.readdirSync(dir, { withFileTypes: true });
+        for (const dirent of dirents) {
+            if (!dirent.isDirectory()) {
+                continue;
+            }
+
+            const fullpath = upath.normalize(upath.join(dir, dirent.name));
+            result.push(fullpath);
+            this.listDirectories(fullpath, result);
+        }
+
+        return result.sort((a, b) => (a > b ? 1 : -1));
+    }
+
+    private showResultsInOutputChannel(keyword: string, searchRoot: string, resultCount: number, results: string[]): void {
+        this.memoGrepChannel.clear();
+        this.memoGrepChannel.appendLine(localize('grepResultHeader', 'Memo: Grep'));
+        this.memoGrepChannel.appendLine(localize('grepResultKeyword', 'Keyword: {0}', keyword));
+        this.memoGrepChannel.appendLine(localize('grepResultScope', 'Scope: {0}', getMemoRelativeDirectoryLabel(this.memodir, searchRoot)));
+        this.memoGrepChannel.appendLine(localize('grepResultCount', 'Results: {0}', resultCount));
+        this.memoGrepChannel.appendLine('');
+
+        results.forEach((result, index) => {
+            if (!result) {
+                return;
+            }
+
+            this.memoGrepChannel.appendLine(`${index}: ${result}`);
+        });
+        this.memoGrepChannel.show(true);
     }
 
     dispose() {
-        this._disposable.dispose();
+        this._disposable?.dispose();
     }
 }
