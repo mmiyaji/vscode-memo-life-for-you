@@ -2,7 +2,7 @@
   "name": "vscode-memo-life-for-you",
   "displayName": "vscode-memo-life-for-you",
   "description": "This extension is for writing notes on VS Code. Inspired by memo (Memo Life For You)",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "satokaz",
   "engines": {
     "vscode": "^1.90.0"
@@ -17,13 +17,13 @@
     "virtualWorkspaces": true
   },
   "icon": "media/icon.png",
-  "homepage": "https://github.com/satokaz/vscode-memo-life-for-you",
+  "homepage": "https://github.com/mmiyaji/vscode-memo-life-for-you",
   "repository": {
     "type": "git",
-    "url": "https://github.com/satokaz/vscode-memo-life-for-you"
+    "url": "https://github.com/mmiyaji/vscode-memo-life-for-you"
   },
   "activationEvents": [
-    "*"
+    "onStartupFinished"
   ],
   "main": "./dist/extension",
   "contributes": {
@@ -86,6 +86,10 @@
       {
         "command": "extension.memoOpenTypora",
         "title": "%extension.memoOpenTypora.title%"
+      },
+      {
+        "command": "extension.memoAdmin",
+        "title": "%extension.memoAdmin.title%"
       }
     ],
     "menus": {
@@ -94,6 +98,10 @@
           "command": "extension.memoOpenTypora",
           "title": "%extension.memoOpenTypora.title%",
           "when": "isMac"
+        },
+        {
+          "command": "extension.memoAdmin",
+          "title": "%extension.memoAdmin.title%"
         }
       ],
       "editor/title": [
@@ -216,6 +224,16 @@
           "default": false,
           "description": "%memoGrepUseRipGrepConfigFile.desc%"
         },
+        "memo-life-for-you.memoGrepViewMode": {
+          "type": "string",
+          "enum": [
+            "quickPick",
+            "outputChannel",
+            "both"
+          ],
+          "default": "quickPick",
+          "description": "%memoGrepViewMode.desc%"
+        },
         "memo-life-for-you.memoGrepUseRipGrepConfigFilePath": {
           "type": "string",
           "default": "",
@@ -240,6 +258,58 @@
           "type": "string",
           "default": "",
           "description": "%memoNewFilNameDateSuffix.desc%"
+        },
+        "memo-life-for-you.memoAdminAppearance": {
+          "type": "string",
+          "enum": [
+            "system",
+            "light",
+            "dark"
+          ],
+          "default": "system",
+          "description": "%memoAdminAppearance.desc%"
+        },
+        "memo-life-for-you.memoAdminColorTheme": {
+          "type": "string",
+          "enum": [
+            "blue",
+            "teal",
+            "amber",
+            "rose",
+            "mono",
+            "forest"
+          ],
+          "default": "blue",
+          "description": "%memoAdminColorTheme.desc%"
+        },
+        "memo-life-for-you.memoDisplayLanguage": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "en",
+            "ja"
+          ],
+          "default": "auto",
+          "description": "%memoDisplayLanguage.desc%"
+        },
+        "memo-life-for-you.memoAdminUseGradient": {
+          "type": "boolean",
+          "default": false,
+          "description": "%memoAdminUseGradient.desc%"
+        },
+        "memo-life-for-you.memoAdminOpenMode": {
+          "type": "string",
+          "enum": [
+            "currentWindow",
+            "newWindow"
+          ],
+          "default": "newWindow",
+          "description": "%memoAdminOpenMode.desc%"
+        },
+        "memo-life-for-you.memoAdminOpenOnStartup": {
+          "type": "boolean",
+          "default": false,
+          "description": "%memoAdminOpenOnStartup.desc%"
         },
         "memo-life-for-you.openMarkdownPreviewUseMPE": {
           "type": "boolean",
@@ -282,8 +352,8 @@
     "vscode:prepublish": "npm run package",
     "webpack": "webpack --mode development",
     "webpack-dev": "webpack --mode development --watch",
-    "compile": "webpack",
-    "watch": "webpack --watch",
+    "compile": "webpack --mode development",
+    "watch": "webpack --mode development --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
@@ -319,7 +389,6 @@
   },
   "dependencies": {
     "chrome-launcher": "^0.15.1",
-    "clipboardy": "^1.2.3",
     "date-fns": "^2.29.3",
     "fs-extra": "^11.2.0",
     "mustache": "^4.2.0",

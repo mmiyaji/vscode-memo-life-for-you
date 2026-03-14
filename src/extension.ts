@@ -1,6 +1,7 @@
 'use strict';
 
 import * as vscode from 'vscode';
+import * as upath from 'upath';
 import * as nls from 'vscode-nls';
 import { memoConfigure } from './memoConfigure';
 import { memoInit }from './memoInit';
@@ -14,6 +15,7 @@ import { memoServe } from './memoServe';
 import { memoOpenFolder } from './memoOpenFolder';
 import { memoOpenChrome } from './memoOpenChrome';
 import { memoOpenTypora } from './memoOpenTypora';
+import { memoAdmin } from './memoAdmin';
 // import { MemoTreeProvider } from './memoTreeProvider';
 
 // import {MDDocumentContentProvider, isMarkdownFile, getMarkdownUri, showPreview} from './MDDocumentContentProvider'
@@ -29,6 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     new memoInit();
     let memoedit = new memoEdit();
     let memogrep = new memoGrep();
+    let memoadmin = new memoAdmin();
 
     // const treeViewProvider = new MemoTreeProvider(); // constructor に list2 を引数として渡すために、このような実装になっている.
     // console.log(treeViewProvider);
@@ -45,9 +48,25 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenFolder", () => new memoOpenFolder().OpenDir()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenChrome", () => new memoOpenChrome().OpenChrome()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenTypora", () => new memoOpenTypora().OpenTypora()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoAdmin", async () => {
+        memoadmin.updateConfiguration();
+        if (memoadmin.memoAdminOpenMode === 'newWindow') {
+            if (context.extensionMode === vscode.ExtensionMode.Development) {
+                vscode.window.showInformationMessage('Memo: Admin opens in the current window while debugging because a new window does not load the extension under development.');
+                await memoadmin.Show(context);
+                return;
+            }
+            await memoadmin.ShowInNewWindow(context);
+            return;
+        }
+        await memoadmin.Show(context);
+    }));
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(() => {
         new memoConfigure().updateConfiguration();
     }));
+
+    void restorePendingMemoAdmin(context, memoadmin);
+    void openMemoAdminOnStartup(context, memoadmin);
 
     // vscode.commands.registerCommand('favorites.refresh', () => treeViewProvider.refresh());
 
@@ -84,4 +103,52 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+}
+
+async function restorePendingMemoAdmin(context: vscode.ExtensionContext, memoadmin: memoAdmin): Promise<void> {
+    const pending = context.globalState.get<{ memodir?: string }>(memoAdmin.pendingOpenKey);
+    if (!pending?.memodir) {
+        return;
+    }
+
+    const tryOpen = async () => {
+        const currentRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!currentRoot || upath.normalize(currentRoot) !== upath.normalize(pending.memodir)) {
+            return false;
+        }
+
+        await context.globalState.update(memoAdmin.pendingOpenKey, undefined);
+        await memoadmin.Show(context);
+        return true;
+    };
+
+    if (await tryOpen()) {
+        return;
+    }
+
+    const retryDelays = [300, 800, 1500, 2500];
+    for (const delay of retryDelays) {
+        setTimeout(() => {
+            void tryOpen();
+        }, delay);
+    }
+
+    const workspaceListener = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        void tryOpen().then((opened) => {
+            if (opened) {
+                workspaceListener.dispose();
+            }
+        });
+    });
+}
+
+async function openMemoAdminOnStartup(context: vscode.ExtensionContext, memoadmin: memoAdmin): Promise<void> {
+    memoadmin.updateConfiguration();
+    if (!memoadmin.memoAdminOpenOnStartup) {
+        return;
+    }
+
+    setTimeout(() => {
+        void memoadmin.Show(context);
+    }, 400);
 }

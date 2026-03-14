@@ -2,7 +2,6 @@ out/*
 !i18n/jpn/out/src/*.*
 node_modules
 *.vsix
-package.nls.ja.json
 dist
 *.cpuprofile
 .DS_Store

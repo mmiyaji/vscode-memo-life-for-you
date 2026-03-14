@@ -1,5 +1,34 @@
 # vscode-memo-life-for-you README
 
+## Memo Admin
+
+日常のメモ操作と直近ファイル確認のための管理画面です。
+
+![Memo Admin dashboard](./media/memo-admin-dashboard.png)
+
+## インストール
+
+このフォーク版は [GitHub Releases](https://github.com/mmiyaji/vscode-memo-life-for-you/releases) で配布する `.vsix` からインストールします。
+
+1. Releases から最新版の `.vsix` をダウンロードします。
+2. VS Code を開きます。
+3. コマンドパレットで `Extensions: Install from VSIX...` を実行します。
+4. ダウンロードした `.vsix` を選択します。
+
+管理画面中心で使う場合は、インストール後に生成した `.code-workspace` を VS Code で開くと、そのまま運用に入りやすくなります。
+
+## フォークについて
+
+このリポジトリは [satokaz/vscode-memo-life-for-you](https://github.com/satokaz/vscode-memo-life-for-you) をベースにした個人向けフォークです。
+
+## このフォークで追加した主な変更
+
+* `config.toml` の `memoDatePathFormat` による日付ベースの保存階層
+* 検索範囲の指定と、テキスト風の grep 結果表示
+* 日常運用向けの `Memo: Admin` 管理画面
+* `.code-workspace` の生成と、管理画面から始める起動導線
+* 管理画面の多言語化、テーマ拡張、履歴表示
+
 これは、Markdown 形式でメモを書くための VS Code 拡張機能です。
 作成されたメモは、日付に基づいたファイル名で単一のディレクトリに置かれ管理されます。
 

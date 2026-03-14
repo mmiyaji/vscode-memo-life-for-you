@@ -8,8 +8,8 @@ import * as dateFns from 'date-fns';
 import * as nls from 'vscode-nls';
 import * as os from 'os';
 import { items, memoConfigure } from './memoConfigure';
-import * as clipboardy from 'clipboardy';
 import * as Mustache from 'mustache';
+import { ensureMemoDateDirectory } from './memoPath';
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
@@ -22,7 +22,7 @@ export class memoNew extends memoConfigure  {
     /**
      * New
      */
-    public New() {
+    public async New() {
         this.readConfig();
 
         let file: string;
@@ -53,7 +53,7 @@ export class memoNew extends memoConfigure  {
         // vscde 上で何も選択されていない (= 0) 場合は、clipboard を参照する
         if (this.memoNewFilenameFromClipboard == true) {
             if (selectString.length == 0) {
-                selectString = clipboardy.readSync();
+                selectString = await vscode.env.clipboard.readText();
             }
         }
         // console.log('selectString =', selectString);
@@ -84,7 +84,8 @@ export class memoNew extends memoConfigure  {
                     .replace(/[\s\]\[\!\"\#\$\%\&\'\(\)\*\/\:\;\<\=\>\?\@\\\^\{\|\}\~\`]/g, '-')
                     .replace(/--+/g ,'') + ".md";
                 }
-                file = upath.normalize(upath.join(this.memodir, file));
+                const targetDir = ensureMemoDateDirectory(this.memodir, this.memoDatePathFormat);
+                file = upath.normalize(upath.join(targetDir, file));
 
                 try {
                     // fs.accessSync(this.memodir);
@@ -113,6 +114,7 @@ export class memoNew extends memoConfigure  {
                                 editor.selection = new vscode.Selection(newPosition, newPosition);
                                 // カーソル位置までスクロール
                                 editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
+                                void this.openMarkdownPreviewIfConfigured();
                             });
                     });
                 }
@@ -126,7 +128,8 @@ export class memoNew extends memoConfigure  {
     public QuickNew() {
         this.readConfig();
 
-        let file: string = upath.normalize(upath.join(this.memodir, dateFns.format(new Date(), 'yyyy-MM-dd') + ".md"));
+        const targetDir = ensureMemoDateDirectory(this.memodir, this.memoDatePathFormat);
+        let file: string = upath.normalize(upath.join(targetDir, dateFns.format(new Date(), 'yyyy-MM-dd') + ".md"));
         let date: Date = new Date();
         let dateFormat = this.memoDateFormat;
         let titlePrefix = this.memoTitlePrefix;
@@ -203,6 +206,7 @@ export class memoNew extends memoConfigure  {
                                 + os.EOL + os.EOL);
                         }).then(() => {
                             editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
+                            void this.openMarkdownPreviewIfConfigured();
                         });
                 });
             });
@@ -222,5 +226,20 @@ export class memoNew extends memoConfigure  {
             ".Date": date
         };
         return Mustache.render(content, params);
+    }
+
+    private async openMarkdownPreviewIfConfigured(): Promise<void> {
+        if (!this.memoEditOpenMarkdown) {
+            return;
+        }
+
+        if (this.openMarkdownPreviewUseMPE && vscode.extensions.getExtension('shd101wyy.markdown-preview-enhanced')) {
+            await vscode.commands.executeCommand('markdown-preview-enhanced.openPreview');
+            await vscode.commands.executeCommand('workbench.action.focusPreviousGroup');
+            return;
+        }
+
+        await vscode.commands.executeCommand('markdown.showPreviewToSide');
+        await vscode.commands.executeCommand('workbench.action.focusPreviousGroup');
     }
 }

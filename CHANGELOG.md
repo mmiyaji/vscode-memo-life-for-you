@@ -2,6 +2,16 @@
 
 All notable changes to the "vscode-memo-life-for-you" extension will be documented in this file.
 
+## 0.6.1
+
+* fork: add fork note and customization summary for this personal branch
+* feat: add Memo Admin screen with recent history, workspace generation, and core config editing
+* feat: support date-based memo folder organization via `memoDatePathFormat` in `config.toml`
+* feat: add grep scope selection and configurable result views (`quickPick`, `outputChannel`, `both`)
+* feat: add admin startup workflow support with `.code-workspace` generation
+* feat: add more admin color themes including a monochrome theme
+* fix: remove build warnings by replacing `clipboardy` with the VS Code clipboard API and setting webpack mode explicitly
+
 ## 0.6.0 
 
 * chore: update version to 0.6.0 and refine dependencies in package.json; add .DS_Store to .gitignore
