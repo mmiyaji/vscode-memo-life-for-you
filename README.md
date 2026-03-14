@@ -31,7 +31,7 @@ The current custom changes include:
 
 Admin dashboard for daily memo operations and quick access to recent files.
 
-![Memo Admin dashboard](https://raw.githubusercontent.com/mmiyaji/vscode-memo-life-for-you/master/media/memo-admin-dashboard.png)
+![Memo Admin dashboard](./media/memo-admin-dashboard.png)
 
 This extension is for writing notes in the markdown format to the VS code.
 Notes are placed in a single directory and are managed with filename based on date.

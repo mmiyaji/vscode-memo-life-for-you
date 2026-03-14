@@ -4,7 +4,7 @@
 
 日常のメモ操作と直近ファイル確認のための管理画面です。
 
-![Memo Admin dashboard](https://raw.githubusercontent.com/mmiyaji/vscode-memo-life-for-you/master/media/memo-admin-dashboard.png)
+![Memo Admin dashboard](./media/memo-admin-dashboard.png)
 
 ## インストール
 
