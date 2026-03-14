@@ -23,178 +23,201 @@ type AdminLocale = 'en' | 'ja';
 export class memoAdmin extends memoConfigure {
     public static readonly pendingOpenKey = 'memoAdmin.pendingOpenInNewWindow';
     private static currentPanel: vscode.WebviewPanel | undefined;
+    private static openingPanelPromise: Promise<void> | undefined;
 
     public async Show(context: vscode.ExtensionContext) {
-        this.readConfig();
-
-        await this.revealMemoRootInExplorer();
-
         if (memoAdmin.currentPanel) {
             memoAdmin.currentPanel.reveal(vscode.ViewColumn.One);
             this.renderPanel(memoAdmin.currentPanel, context);
             return;
         }
 
-        const panel = vscode.window.createWebviewPanel('memoAdmin', localize('extension.memoAdmin.title', 'Memo Admin'), vscode.ViewColumn.One, {
-            enableScripts: true,
-            retainContextWhenHidden: true
-        });
-        memoAdmin.currentPanel = panel;
+        if (memoAdmin.openingPanelPromise) {
+            await memoAdmin.openingPanelPromise;
+            if (memoAdmin.currentPanel) {
+                memoAdmin.currentPanel.reveal(vscode.ViewColumn.One);
+                this.renderPanel(memoAdmin.currentPanel, context);
+            }
+            return;
+        }
 
-        panel.webview.onDidReceiveMessage(async (message) => {
-            switch (message.command) {
-                case 'openFolder':
-                    if (!this.memodir || !fs.existsSync(this.memodir)) {
-                        vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
-                        return;
-                    }
-                    try {
-                        const target = vscode.Uri.file(this.memodir);
-                        await vscode.commands.executeCommand('revealFileInOS', target);
-                    } catch {
-                        vscode.window.showErrorMessage(localize('memoAdmin.openFolderFailed', 'Failed to open the memo root in the file explorer'));
-                    }
-                    break;
-                case 'openConfig':
-                    await vscode.commands.executeCommand('extension.memoConfig');
-                    break;
-                case 'newMemo':
-                    await vscode.commands.executeCommand('extension.memoNew');
-                    break;
-                case 'searchMemo':
-                    await vscode.commands.executeCommand('extension.memoGrep');
-                    break;
-                case 'openRecentFile':
-                    if (message.filename && fs.existsSync(message.filename)) {
-                        const document = await vscode.workspace.openTextDocument(message.filename);
+        this.readConfig();
+
+        memoAdmin.openingPanelPromise = (async () => {
+            await this.revealMemoRootInExplorer();
+
+            if (memoAdmin.currentPanel) {
+                return;
+            }
+
+            const panel = vscode.window.createWebviewPanel('memoAdmin', localize('extension.memoAdmin.title', 'Memo Admin'), vscode.ViewColumn.One, {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            });
+            memoAdmin.currentPanel = panel;
+
+            panel.webview.onDidReceiveMessage(async (message) => {
+                switch (message.command) {
+                    case 'openFolder':
+                        if (!this.memodir || !fs.existsSync(this.memodir)) {
+                            vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
+                            return;
+                        }
+                        try {
+                            const target = vscode.Uri.file(this.memodir);
+                            await vscode.commands.executeCommand('revealFileInOS', target);
+                        } catch {
+                            vscode.window.showErrorMessage(localize('memoAdmin.openFolderFailed', 'Failed to open the memo root in the file explorer'));
+                        }
+                        break;
+                    case 'openConfig':
+                        await vscode.commands.executeCommand('extension.memoConfig');
+                        break;
+                    case 'newMemo':
+                        await vscode.commands.executeCommand('extension.memoNew');
+                        break;
+                    case 'searchMemo':
+                        await vscode.commands.executeCommand('extension.memoGrep');
+                        break;
+                    case 'openRecentFile':
+                        if (message.filename && fs.existsSync(message.filename)) {
+                            const document = await vscode.workspace.openTextDocument(message.filename);
+                            await vscode.window.showTextDocument(document, {
+                                viewColumn: vscode.ViewColumn.One,
+                                preview: true,
+                                preserveFocus: false
+                            });
+                        }
+                        break;
+                    case 'openSettings':
+                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:satokaz.vscode-memo-life-for-you memo-life-for-you');
+                        break;
+                    case 'openLink':
+                        if (message.url) {
+                            await vscode.env.openExternal(vscode.Uri.parse(message.url));
+                        }
+                        break;
+                    case 'createWorkspace': {
+                        if (!this.memodir || !fs.existsSync(this.memodir)) {
+                            vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
+                            return;
+                        }
+
+                        const documentsDir = upath.normalize(upath.join(process.env.USERPROFILE || process.env.HOME || '', 'Documents'));
+                        const selectedUri = await vscode.window.showSaveDialog({
+                            defaultUri: vscode.Uri.file(upath.join(documentsDir, 'Memo Admin.code-workspace')),
+                            filters: {
+                                'VS Code Workspace': ['code-workspace']
+                            },
+                            saveLabel: localize('memoAdmin.saveWorkspaceFile', 'Save workspace file')
+                        });
+
+                        if (!selectedUri) {
+                            return;
+                        }
+
+                        const workspacePath = selectedUri.fsPath.endsWith('.code-workspace')
+                            ? selectedUri.fsPath
+                            : `${selectedUri.fsPath}.code-workspace`;
+                        const workspaceContent = JSON.stringify({
+                            folders: [
+                                {
+                                    path: this.memodir,
+                                    name: 'MEMO'
+                                }
+                            ],
+                            settings: {
+                                'memo-life-for-you.memoAdminOpenOnStartup': true,
+                                'memo-life-for-you.memoAdminOpenMode': 'currentWindow',
+                                'workbench.colorCustomizations': this.getWorkspaceColorCustomizations()
+                            }
+                        }, null, 2);
+
+                        fs.writeFileSync(workspacePath, `${workspaceContent}\n`, 'utf8');
+                        const document = await vscode.workspace.openTextDocument(workspacePath);
                         await vscode.window.showTextDocument(document, {
                             viewColumn: vscode.ViewColumn.One,
-                            preview: true,
+                            preview: false,
                             preserveFocus: false
                         });
+                        vscode.window.showInformationMessage(localize('memoAdmin.workspaceCreated', 'Created workspace file: {0}', workspacePath));
+                        break;
                     }
-                    break;
-                case 'openSettings':
-                    await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:satokaz.vscode-memo-life-for-you memo-life-for-you');
-                    break;
-                case 'openLink':
-                    if (message.url) {
-                        await vscode.env.openExternal(vscode.Uri.parse(message.url));
-                    }
-                    break;
-                case 'createWorkspace': {
-                    if (!this.memodir || !fs.existsSync(this.memodir)) {
-                        vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
-                        return;
-                    }
-
-                    const documentsDir = upath.normalize(upath.join(process.env.USERPROFILE || process.env.HOME || '', 'Documents'));
-                    const selectedUri = await vscode.window.showSaveDialog({
-                        defaultUri: vscode.Uri.file(upath.join(documentsDir, 'Memo Admin.code-workspace')),
-                        filters: {
-                            'VS Code Workspace': ['code-workspace']
-                        },
-                        saveLabel: localize('memoAdmin.saveWorkspaceFile', 'Save workspace file')
-                    });
-
-                    if (!selectedUri) {
-                        return;
-                    }
-
-                    const workspacePath = selectedUri.fsPath.endsWith('.code-workspace')
-                        ? selectedUri.fsPath
-                        : `${selectedUri.fsPath}.code-workspace`;
-                    const workspaceContent = JSON.stringify({
-                        folders: [
-                            {
-                                path: this.memodir,
-                                name: 'MEMO'
-                            }
-                        ],
-                        settings: {
-                            'memo-life-for-you.memoAdminOpenOnStartup': true,
-                            'memo-life-for-you.memoAdminOpenMode': 'currentWindow'
+                    case 'saveCoreSettings':
+                        if (!message.memodir || !fs.existsSync(message.memodir)) {
+                            vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
+                            return;
                         }
-                    }, null, 2);
 
-                    fs.writeFileSync(workspacePath, `${workspaceContent}\n`, 'utf8');
-                    const document = await vscode.workspace.openTextDocument(workspacePath);
-                    await vscode.window.showTextDocument(document, {
-                        viewColumn: vscode.ViewColumn.One,
-                        preview: false,
-                        preserveFocus: false
-                    });
-                    vscode.window.showInformationMessage(localize('memoAdmin.workspaceCreated', 'Created workspace file: {0}', workspacePath));
-                    break;
+                        if (message.memotemplate && message.memotemplate !== "" && !fs.existsSync(message.memotemplate)) {
+                            vscode.window.showErrorMessage(localize('memoAdmin.invalidTemplate', 'The selected template file does not exist'));
+                            return;
+                        }
+
+                        this.updateTomlConfig({
+                            memodir: message.memodir ?? this.memodir,
+                            memotemplate: message.memotemplate ?? this.memotemplate ?? "",
+                            memoDatePathFormat: message.memoDatePathFormat ?? this.memoDatePathFormat ?? "yyyy/MM"
+                        });
+                        await this.revealMemoRootInExplorer();
+                        this.renderPanel(panel, context);
+                        vscode.window.showInformationMessage(localize('memoAdmin.saved', 'Memo settings updated'));
+                        break;
+                    case 'pickMemoDir': {
+                        const picked = await vscode.window.showOpenDialog({
+                            canSelectFiles: false,
+                            canSelectFolders: true,
+                            canSelectMany: false,
+                            defaultUri: fs.existsSync(this.memodir) ? vscode.Uri.file(this.memodir) : undefined,
+                            openLabel: localize('memoAdmin.pickMemoDir', 'Select memo root')
+                        });
+                        if (picked?.[0]) {
+                            panel.webview.postMessage({ command: 'setMemoDir', value: picked[0].fsPath });
+                        }
+                        break;
+                    }
+                    case 'pickTemplateFile': {
+                        const effectiveTemplatePath = this.memotemplate || this.ensureBuiltInTemplateFile();
+                        const picked = await vscode.window.showOpenDialog({
+                            canSelectFiles: true,
+                            canSelectFolders: false,
+                            canSelectMany: false,
+                            defaultUri: effectiveTemplatePath && fs.existsSync(effectiveTemplatePath) ? vscode.Uri.file(effectiveTemplatePath) : undefined,
+                            openLabel: localize('memoAdmin.pickTemplateFile', 'Select template file')
+                        });
+                        if (picked?.[0]) {
+                            panel.webview.postMessage({ command: 'setTemplateFile', value: picked[0].fsPath });
+                        }
+                        break;
+                    }
                 }
-                case 'saveCoreSettings':
-                    if (!message.memodir || !fs.existsSync(message.memodir)) {
-                        vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
-                        return;
-                    }
+            });
 
-                    if (message.memotemplate && message.memotemplate !== "" && !fs.existsSync(message.memotemplate)) {
-                        vscode.window.showErrorMessage(localize('memoAdmin.invalidTemplate', 'The selected template file does not exist'));
-                        return;
-                    }
-
-                    this.updateTomlConfig({
-                        memodir: message.memodir ?? this.memodir,
-                        memotemplate: message.memotemplate ?? this.memotemplate ?? "",
-                        memoDatePathFormat: message.memoDatePathFormat ?? this.memoDatePathFormat ?? "yyyy/MM"
-                    });
-                    await this.revealMemoRootInExplorer();
+            const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
+                if (event.affectsConfiguration('memo-life-for-you')) {
                     this.renderPanel(panel, context);
-                    vscode.window.showInformationMessage(localize('memoAdmin.saved', 'Memo settings updated'));
-                    break;
-                case 'pickMemoDir': {
-                    const picked = await vscode.window.showOpenDialog({
-                        canSelectFiles: false,
-                        canSelectFolders: true,
-                        canSelectMany: false,
-                        defaultUri: fs.existsSync(this.memodir) ? vscode.Uri.file(this.memodir) : undefined,
-                        openLabel: localize('memoAdmin.pickMemoDir', 'Select memo root')
-                    });
-                    if (picked?.[0]) {
-                        panel.webview.postMessage({ command: 'setMemoDir', value: picked[0].fsPath });
-                    }
-                    break;
                 }
-                case 'pickTemplateFile': {
-                    const effectiveTemplatePath = this.memotemplate || this.ensureBuiltInTemplateFile();
-                    const picked = await vscode.window.showOpenDialog({
-                        canSelectFiles: true,
-                        canSelectFolders: false,
-                        canSelectMany: false,
-                        defaultUri: effectiveTemplatePath && fs.existsSync(effectiveTemplatePath) ? vscode.Uri.file(effectiveTemplatePath) : undefined,
-                        openLabel: localize('memoAdmin.pickTemplateFile', 'Select template file')
-                    });
-                    if (picked?.[0]) {
-                        panel.webview.postMessage({ command: 'setTemplateFile', value: picked[0].fsPath });
-                    }
-                    break;
-                }
-            }
-        });
-
-        const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
-            if (event.affectsConfiguration('memo-life-for-you')) {
+            });
+            const themeListener = vscode.window.onDidChangeActiveColorTheme(() => {
                 this.renderPanel(panel, context);
-            }
-        });
-        const themeListener = vscode.window.onDidChangeActiveColorTheme(() => {
+            });
+
+            panel.onDidDispose(() => {
+                configListener.dispose();
+                themeListener.dispose();
+                if (memoAdmin.currentPanel === panel) {
+                    memoAdmin.currentPanel = undefined;
+                }
+            });
+
             this.renderPanel(panel, context);
-        });
+        })();
 
-        panel.onDidDispose(() => {
-            configListener.dispose();
-            themeListener.dispose();
-            if (memoAdmin.currentPanel === panel) {
-                memoAdmin.currentPanel = undefined;
-            }
-        });
-
-        this.renderPanel(panel, context);
+        try {
+            await memoAdmin.openingPanelPromise;
+        } finally {
+            memoAdmin.openingPanelPromise = undefined;
+        }
     }
 
     public async ShowInNewWindow(context: vscode.ExtensionContext): Promise<void> {
@@ -244,9 +267,9 @@ export class memoAdmin extends memoConfigure {
     private async ensureMemoWorkspaceFolder(): Promise<void> {
         const memoUri = vscode.Uri.file(this.memodir);
         const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-        const normalizedMemoDir = upath.normalize(this.memodir);
+        const normalizedMemoDir = this.normalizeWorkspacePath(this.memodir);
 
-        const alreadyExists = workspaceFolders.some((folder) => upath.normalize(folder.uri.fsPath) === normalizedMemoDir);
+        const alreadyExists = workspaceFolders.some((folder) => this.normalizeWorkspacePath(folder.uri.fsPath) === normalizedMemoDir);
         if (alreadyExists) {
             return;
         }
@@ -256,6 +279,81 @@ export class memoAdmin extends memoConfigure {
             uri: memoUri,
             name: 'Memo'
         });
+    }
+
+    private normalizeWorkspacePath(pathValue: string): string {
+        const normalized = upath.normalizeTrim(pathValue);
+        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    }
+
+    private getWorkspaceColorCustomizations(): Record<string, string> {
+        const colors = this.getWorkspaceThemeColors(this.memoAdminColorTheme || 'blue');
+        return {
+            'statusBar.background': colors.statusBarBackground,
+            'statusBar.foreground': colors.statusBarForeground,
+            'statusBar.border': colors.statusBarBorder,
+            'titleBar.activeBackground': colors.titleBarBackground,
+            'titleBar.activeForeground': colors.titleBarForeground
+        };
+    }
+
+    private getWorkspaceThemeColors(theme: string): {
+        statusBarBackground: string;
+        statusBarForeground: string;
+        statusBarBorder: string;
+        titleBarBackground: string;
+        titleBarForeground: string;
+    } {
+        switch (theme) {
+            case 'teal':
+                return {
+                    statusBarBackground: '#1f5f5a',
+                    statusBarForeground: '#f5fffd',
+                    statusBarBorder: '#35b7ab',
+                    titleBarBackground: '#194a46',
+                    titleBarForeground: '#f5fffd'
+                };
+            case 'amber':
+                return {
+                    statusBarBackground: '#7a4b13',
+                    statusBarForeground: '#fff8ed',
+                    statusBarBorder: '#f0a53a',
+                    titleBarBackground: '#5f3a0f',
+                    titleBarForeground: '#fff8ed'
+                };
+            case 'rose':
+                return {
+                    statusBarBackground: '#7c3650',
+                    statusBarForeground: '#fff7fa',
+                    statusBarBorder: '#e76b96',
+                    titleBarBackground: '#5f2940',
+                    titleBarForeground: '#fff7fa'
+                };
+            case 'mono':
+                return {
+                    statusBarBackground: '#3d434a',
+                    statusBarForeground: '#f5f7f9',
+                    statusBarBorder: '#aeb6bf',
+                    titleBarBackground: '#2f3439',
+                    titleBarForeground: '#f5f7f9'
+                };
+            case 'forest':
+                return {
+                    statusBarBackground: '#355c42',
+                    statusBarForeground: '#f5fff8',
+                    statusBarBorder: '#7fb091',
+                    titleBarBackground: '#294734',
+                    titleBarForeground: '#f5fff8'
+                };
+            default:
+                return {
+                    statusBarBackground: '#23415f',
+                    statusBarForeground: '#f6fbff',
+                    statusBarBorder: '#58a6ff',
+                    titleBarBackground: '#1b3148',
+                    titleBarForeground: '#f6fbff'
+                };
+        }
     }
 
     private collectStats(): MemoStats {
