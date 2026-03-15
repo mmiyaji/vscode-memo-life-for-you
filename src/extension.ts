@@ -23,7 +23,7 @@ import { memoAdmin } from './memoAdmin';
 // const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Congratulations, your extension "vscode-memo-life-for-you" is now active!');
+    console.log('Congratulations, your extension "memo-life-for-you-admin" is now active!');
     // console.log(vscode.env);
     // console.log(path.normalize(path.join(vscode.env.appRoot, "node_modules", "vscode-ripgrep", "bin", "rg")));
     // console.log('vscode.Markdown =', vscode.extensions.getExtension("Microsoft.vscode-markdown").extensionPath);

@@ -1,14 +1,22 @@
 {
-  "name": "vscode-memo-life-for-you",
-  "displayName": "vscode-memo-life-for-you",
-  "description": "This extension is for writing notes on VS Code. Inspired by memo (Memo Life For You)",
+  "name": "memo-life-for-you-admin",
+  "displayName": "Memo Life For You Admin",
+  "description": "Daily memo workflow for VS Code with date-based folders, search tools, and a memo admin dashboard.",
   "version": "0.6.2",
-  "publisher": "satokaz",
+  "publisher": "mmiyaji",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "memo",
+    "notes",
+    "markdown",
+    "journal",
+    "productivity"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -18,6 +26,9 @@
   },
   "icon": "media/icon.png",
   "homepage": "https://github.com/mmiyaji/vscode-memo-life-for-you",
+  "bugs": {
+    "url": "https://github.com/mmiyaji/vscode-memo-life-for-you/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mmiyaji/vscode-memo-life-for-you"

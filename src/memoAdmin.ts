@@ -99,7 +99,7 @@ export class memoAdmin extends memoConfigure {
                         }
                         break;
                     case 'openSettings':
-                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:satokaz.vscode-memo-life-for-you memo-life-for-you');
+                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:mmiyaji.memo-life-for-you-admin memo-life-for-you');
                         break;
                     case 'openKeyboardShortcuts':
                         await vscode.commands.executeCommand('workbench.action.openGlobalKeybindings');
