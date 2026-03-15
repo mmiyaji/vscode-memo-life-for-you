@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
@@ -15,15 +15,24 @@ type MemoStats = {
     yearCounts: Array<{ label: string; count: number }>;
     monthCounts: Array<{ label: string; count: number }>;
     folderCounts: Array<{ label: string; count: number }>;
-    recentFiles: Array<{ label: string; createdAt: string; updatedAt: string; filename: string; lineCount: number; fileSizeLabel: string; mtimeMs: number }>;
+    pinnedFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; lineCount: number; fileSizeLabel: string; mtimeMs: number }>;
+    recentFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; lineCount: number; fileSizeLabel: string; mtimeMs: number }>;
 };
+type MemoRecentItem = MemoStats['recentFiles'][number];
 
 type AdminLocale = 'en' | 'ja';
+type MemoStatsCache = {
+    key: string;
+    stats: MemoStats;
+    createdAt: number;
+};
 
 export class memoAdmin extends memoConfigure {
     public static readonly pendingOpenKey = 'memoAdmin.pendingOpenInNewWindow';
+    private static readonly statsCacheTtlMs = 5000;
     private static currentPanel: vscode.WebviewPanel | undefined;
     private static openingPanelPromise: Promise<void> | undefined;
+    private static statsCache: MemoStatsCache | undefined;
 
     public async Show(context: vscode.ExtensionContext) {
         if (memoAdmin.currentPanel) {
@@ -92,12 +101,40 @@ export class memoAdmin extends memoConfigure {
                     case 'openSettings':
                         await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:satokaz.vscode-memo-life-for-you memo-life-for-you');
                         break;
-                    case 'openLink':
-                        if (message.url) {
-                            await vscode.env.openExternal(vscode.Uri.parse(message.url));
-                        }
+                    case 'openKeyboardShortcuts':
+                        await vscode.commands.executeCommand('workbench.action.openGlobalKeybindings');
                         break;
-                    case 'createWorkspace': {
+                case 'openLink':
+                    if (message.url) {
+                        await vscode.env.openExternal(vscode.Uri.parse(message.url));
+                    }
+                    break;
+                case 'refreshAdmin':
+                    this.invalidateStatsCache();
+                    this.renderPanel(panel, context);
+                    break;
+                case 'openStatsTarget':
+                    if (message.targetPath && fs.existsSync(message.targetPath)) {
+                        await this.ensureMemoWorkspaceFolder();
+                        await vscode.commands.executeCommand('workbench.view.explorer');
+                        await vscode.commands.executeCommand('revealInExplorer', vscode.Uri.file(message.targetPath));
+                    }
+                    break;
+                case 'pinRecentFile':
+                    if (message.filename && fs.existsSync(message.filename)) {
+                        await this.updatePinnedFiles((current) => [message.filename, ...current]);
+                        this.invalidateStatsCache();
+                        this.renderPanel(panel, context);
+                    }
+                    break;
+                case 'unpinRecentFile':
+                    if (message.filename) {
+                        await this.updatePinnedFiles((current) => current.filter((filename) => this.normalizeWorkspacePath(filename) !== this.normalizeWorkspacePath(message.filename)));
+                        this.invalidateStatsCache();
+                        this.renderPanel(panel, context);
+                    }
+                    break;
+                case 'createWorkspace': {
                         if (!this.memodir || !fs.existsSync(this.memodir)) {
                             vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
                             return;
@@ -255,6 +292,13 @@ export class memoAdmin extends memoConfigure {
         try {
             const todayDir = getMemoDateDirectory(this.memodir, this.memoDatePathFormat);
             if (fs.existsSync(todayDir)) {
+                const todayFiles = fs.readdirSync(todayDir, { withFileTypes: true })
+                    .filter((entry) => entry.isFile())
+                    .map((entry) => upath.join(todayDir, entry.name))
+                    .sort((a, b) => a.localeCompare(b));
+                if (todayFiles.length > 0) {
+                    return todayFiles[todayFiles.length - 1];
+                }
                 return todayDir;
             }
         } catch {
@@ -284,6 +328,27 @@ export class memoAdmin extends memoConfigure {
     private normalizeWorkspacePath(pathValue: string): string {
         const normalized = upath.normalizeTrim(pathValue);
         return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    }
+
+    private invalidateStatsCache(): void {
+        memoAdmin.statsCache = undefined;
+    }
+
+    private getSettingsTarget(): vscode.ConfigurationTarget {
+        return (vscode.workspace.workspaceFolders?.length ?? 0) > 0
+            ? vscode.ConfigurationTarget.Workspace
+            : vscode.ConfigurationTarget.Global;
+    }
+
+    private async updatePinnedFiles(updater: (current: string[]) => string[]): Promise<void> {
+        const normalizedCurrent = (this.memoPinnedFiles ?? [])
+            .map((filename) => upath.normalizeTrim(filename))
+            .filter(Boolean);
+        const next = updater(normalizedCurrent)
+            .map((filename) => upath.normalizeTrim(filename))
+            .filter((filename, index, array) => !!filename && array.indexOf(filename) === index);
+        await vscode.workspace.getConfiguration('memo-life-for-you').update('memoPinnedFiles', next, this.getSettingsTarget());
+        this.updateConfiguration();
     }
 
     private getWorkspaceColorCustomizations(): Record<string, string> {
@@ -363,8 +428,23 @@ export class memoAdmin extends memoConfigure {
                 yearCounts: [],
                 monthCounts: [],
                 folderCounts: [],
+                pinnedFiles: [],
                 recentFiles: [],
             };
+        }
+
+        const cacheKey = JSON.stringify({
+            memodir: this.normalizeWorkspacePath(this.memodir),
+            extnames: this.memoListDisplayExtname,
+            datePathFormat: this.memoDatePathFormat,
+            recentTitleMode: this.memoAdminRecentTitleMode,
+            pinnedFiles: this.memoPinnedFiles
+        });
+        const now = Date.now();
+        if (memoAdmin.statsCache
+            && memoAdmin.statsCache.key === cacheKey
+            && (now - memoAdmin.statsCache.createdAt) < memoAdmin.statsCacheTtlMs) {
+            return memoAdmin.statsCache.stats;
         }
 
         const files = this.readFilesRecursively(this.memodir)
@@ -374,7 +454,7 @@ export class memoAdmin extends memoConfigure {
         const monthMap = new Map<string, number>();
         const folderMap = new Map<string, number>();
 
-        const recentFiles = files.map((filename) => {
+        const recentCandidates = files.map((filename) => {
             const stat = fs.statSync(filename);
             const yearLabel = dateFns.format(stat.birthtime, 'yyyy');
             const monthLabel = dateFns.format(stat.birthtime, 'yyyy/MM');
@@ -384,26 +464,41 @@ export class memoAdmin extends memoConfigure {
             monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
             folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
 
-            return {
-                label: getMemoRelativeDirectoryLabel(this.memodir, filename),
-                createdAt: dateFns.format(stat.birthtime, 'yyyy-MM-dd HH:mm'),
-                updatedAt: dateFns.format(stat.mtime, 'yyyy-MM-dd HH:mm'),
-                filename,
-                mtimeMs: stat.mtime.getTime(),
-                lineCount: this.countFileLines(filename),
-                fileSizeLabel: this.formatFileSize(stat.size)
-            };
+            return this.createRecentFileEntry(filename, stat);
         })
             .sort((a, b) => b.mtimeMs - a.mtimeMs)
             .slice(0, 8);
 
-        return {
+        const recentFiles = recentCandidates.map((item) => ({
+            ...item,
+            lineCount: this.countFileLines(item.filename)
+        }));
+        const pinnedFiles = (this.memoPinnedFiles ?? [])
+            .map((filename) => upath.normalizeTrim(filename))
+            .filter((filename, index, array) => !!filename && array.indexOf(filename) === index && fs.existsSync(filename))
+            .map((filename) => {
+                const stat = fs.statSync(filename);
+                return {
+                    ...this.createRecentFileEntry(filename, stat),
+                    lineCount: this.countFileLines(filename)
+                };
+            })
+            .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+        const stats = {
             totalFiles: files.length,
             yearCounts: this.mapToSortedArray(yearMap),
             monthCounts: this.mapToSortedArray(monthMap).slice(0, 12),
             folderCounts: this.mapToSortedArray(folderMap).slice(0, 12),
+            pinnedFiles,
             recentFiles,
         };
+        memoAdmin.statsCache = {
+            key: cacheKey,
+            stats,
+            createdAt: now
+        };
+        return stats;
     }
 
     private mapToSortedArray(map: Map<string, number>): Array<{ label: string; count: number }> {
@@ -449,6 +544,64 @@ export class memoAdmin extends memoConfigure {
             return `${(size / 1024).toFixed(1)} KB`;
         }
         return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    private createRecentFileEntry(filename: string, stat: fs.Stats): Omit<MemoRecentItem, 'lineCount'> {
+        const pathLabel = getMemoRelativeDirectoryLabel(this.memodir, filename);
+        return {
+            label: pathLabel,
+            title: this.getRecentHistoryTitle(filename, pathLabel),
+            pathLabel,
+            createdAt: dateFns.format(stat.birthtime, 'yyyy-MM-dd HH:mm'),
+            updatedAt: dateFns.format(stat.mtime, 'yyyy-MM-dd HH:mm'),
+            filename,
+            mtimeMs: stat.mtime.getTime(),
+            fileSizeLabel: this.formatFileSize(stat.size)
+        };
+    }
+
+    private getRecentHistoryTitle(filename: string, pathLabel: string): string {
+        const mode = this.memoAdminRecentTitleMode || 'path';
+        if (mode === 'path') {
+            return pathLabel;
+        }
+
+        const contentTitle = this.extractRecentContentTitle(filename);
+        if (mode === 'content') {
+            return contentTitle || pathLabel;
+        }
+
+        return contentTitle ? `${contentTitle}` : pathLabel;
+    }
+
+    private extractRecentContentTitle(filename: string): string {
+        try {
+            const content = fs.readFileSync(filename, 'utf8');
+            const ext = upath.extname(filename).toLowerCase();
+            const lines = content.split(/\r\n|\r|\n/).map((line) => line.trim()).filter(Boolean);
+            if (lines.length === 0) {
+                return '';
+            }
+
+            if (ext === '.md') {
+                const heading = lines.find((line) => /^#{1,6}\s+/.test(line));
+                if (heading) {
+                    return this.truncateRecentTitle(heading.replace(/^#{1,6}\s+/, ''));
+                }
+            }
+
+            return this.truncateRecentTitle(lines.slice(0, 2).join(' / '));
+        } catch {
+            return '';
+        }
+    }
+
+    private truncateRecentTitle(value: string): string {
+        const normalized = value.replace(/\s+/g, ' ').trim();
+        if (normalized.length <= 72) {
+            return normalized;
+        }
+        return `${normalized.slice(0, 69)}...`;
     }
 
     private getHtml(context: vscode.ExtensionContext, stats: MemoStats): string {
@@ -697,6 +850,35 @@ export class memoAdmin extends memoConfigure {
             padding-top: 4px;
         }
 
+        .header-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding-top: 4px;
+        }
+
+        .icon-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1;
+        }
+
+        .icon-button:hover {
+            color: var(--accent-strong);
+            border-color: var(--accent-border);
+            background: var(--accent-soft);
+            transform: none;
+        }
+
         .hero,
         .card {
             background: var(--surface-bg);
@@ -853,11 +1035,16 @@ export class memoAdmin extends memoConfigure {
 
         .summary-caret {
             color: var(--muted);
-            font-size: 12px;
+            font-size: 15px;
+            line-height: 1;
             transition: transform 120ms ease;
         }
 
         .config-block[open] .summary-caret {
+            transform: rotate(180deg);
+        }
+
+        .detail-block[open] .summary-caret {
             transform: rotate(180deg);
         }
 
@@ -965,6 +1152,12 @@ export class memoAdmin extends memoConfigure {
             gap: 16px;
         }
 
+        .grid-single {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 16px;
+        }
+
         .stack {
             display: grid;
             gap: 16px;
@@ -997,6 +1190,9 @@ export class memoAdmin extends memoConfigure {
             background: transparent;
             color: var(--muted);
             padding: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             cursor: pointer;
             text-decoration: underline;
             text-underline-offset: 2px;
@@ -1006,6 +1202,13 @@ export class memoAdmin extends memoConfigure {
             color: var(--accent-strong);
             background: transparent;
             transform: none;
+        }
+
+        .link-icon {
+            width: 14px;
+            height: 14px;
+            flex: 0 0 auto;
+            fill: currentColor;
         }
 
         .card {
@@ -1076,10 +1279,10 @@ export class memoAdmin extends memoConfigure {
         }
 
         .recent-item {
-            width: 100%;
-            text-align: left;
             display: grid;
-            gap: 4px;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: start;
             padding: 10px 12px;
             border: 1px solid var(--border);
             border-radius: 10px;
@@ -1089,12 +1292,33 @@ export class memoAdmin extends memoConfigure {
 
         .recent-item:hover {
             border-color: var(--accent);
-            background: var(--accent-soft);
-            transform: none;
+        }
+
+        .recent-open {
+            width: 100%;
+            text-align: left;
+            display: grid;
+            gap: 4px;
+            border: none;
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            cursor: pointer;
+        }
+
+        .recent-open:hover .recent-title,
+        .recent-open:focus-visible .recent-title {
+            color: var(--accent-strong);
         }
 
         .recent-title {
             font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+
+        .recent-path {
+            font-size: 12px;
+            color: var(--muted);
             overflow-wrap: anywhere;
         }
 
@@ -1103,15 +1327,142 @@ export class memoAdmin extends memoConfigure {
             color: var(--muted);
         }
 
+        .pin-button {
+            align-self: center;
+            min-width: 72px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--accent-border);
+            background: var(--accent-soft);
+            color: var(--accent-strong);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .pin-button:hover {
+            background: var(--accent-soft-strong);
+        }
+
         .empty {
             color: var(--muted);
             padding: 8px 0 2px;
         }
 
+        .detail-block {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-bg);
+        }
+
+        .detail-block summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .detail-block summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .detail-block[open] summary {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            padding: 14px;
+        }
+
+        .mini-panel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .mini-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .mini-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent-strong);
+        }
+
+        .mini-caption {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        .bar-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: minmax(86px, 120px) minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .bar-row.is-clickable {
+            cursor: pointer;
+        }
+
+        .bar-row.is-clickable:hover .bar-label,
+        .bar-row.is-clickable:hover .bar-value {
+            color: var(--accent-strong);
+        }
+
+        .bar-row.is-clickable:hover .bar-track {
+            background: color-mix(in srgb, var(--surface-alt) 70%, var(--accent) 30%);
+        }
+
+        .bar-label {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .bar-track {
+            position: relative;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--surface-alt);
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            position: absolute;
+            inset: 0 auto 0 0;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+        }
+
+        .bar-value {
+            min-width: 28px;
+            text-align: right;
+            font-size: 12px;
+            color: var(--text);
+            font-weight: 600;
+        }
+
         @media (max-width: 900px) {
             .summary,
             .grid,
-            .config-grid {
+            .config-grid,
+            .detail-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -1143,7 +1494,9 @@ export class memoAdmin extends memoConfigure {
                 <h1 class="title">${t('extension.memoAdmin.title', 'Memo Admin')}</h1>
                 <div class="subtitle">${t('memoAdmin.summary', 'Current memo storage and operation summary')}</div>
             </div>
-            <div class="version">v${escapeHtml(String(extensionVersion))}</div>
+            <div class="header-actions">
+                <button class="icon-button" type="button" data-command="refreshAdmin" title="${t('memoAdmin.refresh', 'Refresh')}">&#x21bb;</button>
+            </div>
         </header>
 
         <section class="hero">
@@ -1188,10 +1541,10 @@ export class memoAdmin extends memoConfigure {
             <details class="config-block">
                 <summary>
                     <span class="summary-label">
-                        <span class="summary-icon">⚙</span>
+                        <span class="summary-icon">&#9881;</span>
                         <span>${t('memoAdmin.coreSettings', 'Core settings')}</span>
                     </span>
-                    <span class="summary-caret">▼</span>
+                    <span class="summary-caret">&#9660;</span>
                 </summary>
                 <div class="config-grid">
                     <label class="field">
@@ -1216,10 +1569,11 @@ export class memoAdmin extends memoConfigure {
                         <span class="field-help">${t('memoAdmin.datePathHelp', 'Example: yyyy/MM or yyyy/MM/dd')}</span>
                     </label>
                 </div>
-                <div class="action-help">${t('memoAdmin.workspaceHelp', 'Startup file: create a .code-workspace that opens this memo folder and starts with Memo: Admin. You can associate it with VS Code.')}</div>
+                <div class="action-help">${t('memoAdmin.workspaceHelp', 'Startup file: create a .code-workspace that opens this memo folder and starts with Memo: Admin. You can associate it with VS Code.')} ${t('memoAdmin.shortcutHelp', 'Keyboard shortcut changes are managed from Keyboard Shortcuts or keybindings.json.')}</div>
                 <div class="config-actions">
                     <button class="secondary" data-command="createWorkspace" title="${t('memoAdmin.createWorkspaceTooltip', 'Generate a startup .code-workspace file. If you associate it with VS Code, double-clicking it can open directly into Memo: Admin mode.')}">${t('memoAdmin.createWorkspace', 'Create workspace')}</button>
                     <button class="secondary" data-command="openConfig">${t('memoAdmin.openConfig', 'Open config file')}</button>
+                    <button class="secondary" data-command="openKeyboardShortcuts">${t('memoAdmin.openKeyboardShortcuts', 'Keyboard shortcuts')}</button>
                     <button class="secondary" data-command="openSettings">${t('memoAdmin.openAdvancedSettings', 'Advanced settings')}</button>
                     <button class="primary" data-command="saveCoreSettings">${t('memoAdmin.save', 'Save')}</button>
                 </div>
@@ -1227,44 +1581,70 @@ export class memoAdmin extends memoConfigure {
         </section>
 
         <section class="stack">
-            <div class="grid">
-                <article class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">${t('memoAdmin.monthlyCounts', 'Monthly counts')}</h2>
-                        <div class="card-caption">${t('memoAdmin.latest12', 'Latest 12')}</div>
-                    </div>
-                    ${renderList(stats.monthCounts, locale)}
-                </article>
-                <article class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">${t('memoAdmin.yearlyCounts', 'Yearly counts')}</h2>
-                        <div class="card-caption">${t('memoAdmin.byCreatedAt', 'By created date')}</div>
-                    </div>
-                    ${renderList(stats.yearCounts, locale)}
-                </article>
-                <article class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">${t('memoAdmin.folderCounts', 'Folder counts')}</h2>
-                        <div class="card-caption">${t('memoAdmin.topFolders', 'Top 12 folders')}</div>
-                    </div>
-                    ${renderList(stats.folderCounts, locale)}
-                </article>
-            </div>
+            <details class="detail-block">
+                <summary>
+                    <span class="summary-label">
+                        <span class="summary-icon">&#9638;</span>
+                        <span>${t('memoAdmin.moreStats', 'More stats')}</span>
+                    </span>
+                    <span class="summary-caret">&#9660;</span>
+                </summary>
+                <div class="detail-grid">
+                    <section class="mini-panel">
+                        <div class="mini-header">
+                            <div class="mini-title">${t('memoAdmin.monthlyCounts', 'Monthly counts')}</div>
+                            <div class="mini-caption">${t('memoAdmin.latest12', 'Latest 12 months')}</div>
+                        </div>
+                        ${renderBarList(stats.monthCounts, locale, { pathResolver: (label) => upath.join(this.memodir, label) })}
+                    </section>
+                    <section class="mini-panel">
+                        <div class="mini-header">
+                            <div class="mini-title">${t('memoAdmin.yearlyCounts', 'Yearly counts')}</div>
+                            <div class="mini-caption">${t('memoAdmin.byCreatedAt', 'By created date')}</div>
+                        </div>
+                        ${renderBarList(stats.yearCounts, locale, { pathResolver: (label) => upath.join(this.memodir, label) })}
+                    </section>
+                    <section class="mini-panel">
+                        <div class="mini-header">
+                            <div class="mini-title">${t('memoAdmin.folderCounts', 'Folder counts')}</div>
+                            <div class="mini-caption">${t('memoAdmin.topFolders', 'Folder name desc')}</div>
+                        </div>
+                        ${renderBarList(stats.folderCounts.slice(0, 8), locale, { pathResolver: (label) => label === '.' ? this.memodir : upath.join(this.memodir, label) })}
+                    </section>
+                </div>
+            </details>
+            ${stats.pinnedFiles.length > 0 ? `<article class="card">
+                <div class="card-header">
+                    <h2 class="card-title">${t('memoAdmin.pinnedMemos', 'Pinned memos')}</h2>
+                    <div class="card-caption">${t('memoAdmin.pinnedCaption', 'Fixed access')}</div>
+                </div>
+                ${renderRecentFiles(stats.pinnedFiles, locale, {
+                    pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
+                    showPinToggle: true,
+                    pinLabel: t('memoAdmin.unpin', 'Unpin')
+                })}
+            </article>` : ''}
             <article class="card">
                 <div class="card-header">
                     <h2 class="card-title">${t('memoAdmin.recentHistory', 'Recent history')}</h2>
                     <div class="card-caption">${t('memoAdmin.latest8Updated', 'Latest 8 updates')}</div>
                 </div>
-                ${renderRecentFiles(stats.recentFiles, locale)}
+                ${renderRecentFiles(stats.recentFiles, locale, {
+                    pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
+                    showPinToggle: true,
+                    pinLabel: t('memoAdmin.pin', 'Pin'),
+                    unpinLabel: t('memoAdmin.unpin', 'Unpin')
+                })}
             </article>
         </section>
         <footer class="footer">
             <div class="footer-links">
-                ${repositoryUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(repositoryUrl)}">${t('memoAdmin.repoLink', 'GitHub/mmiyaji')}</button>` : ''}
+                ${repositoryUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(repositoryUrl)}"><svg class="link-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path></svg><span>${t('memoAdmin.repoLink', 'GitHub/mmiyaji')}</span></button>` : ''}
             </div>
             <div class="footer-note">
                 ${t('memoAdmin.forkedFrom', 'forked from')} ${upstreamUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(upstreamUrl)}">satokaz/vscode-memo-life-for-you</button>` : ''}
             </div>
+            <div class="version">v${escapeHtml(String(extensionVersion))}</div>
         </footer>
     </div>
     <script nonce="${nonce}">
@@ -1290,9 +1670,27 @@ export class memoAdmin extends memoConfigure {
             });
         });
 
+        document.querySelectorAll('button[data-pin-file]').forEach((button) => {
+            button.addEventListener('click', () => {
+                vscode.postMessage({ command: 'pinRecentFile', filename: button.dataset.pinFile });
+            });
+        });
+
+        document.querySelectorAll('button[data-unpin-file]').forEach((button) => {
+            button.addEventListener('click', () => {
+                vscode.postMessage({ command: 'unpinRecentFile', filename: button.dataset.unpinFile });
+            });
+        });
+
         document.querySelectorAll('button[data-link]').forEach((button) => {
             button.addEventListener('click', () => {
                 vscode.postMessage({ command: 'openLink', url: button.dataset.link });
+            });
+        });
+
+        document.querySelectorAll('[data-stats-target]').forEach((element) => {
+            element.addEventListener('click', () => {
+                vscode.postMessage({ command: 'openStatsTarget', targetPath: element.dataset.statsTarget });
             });
         });
 
@@ -1451,13 +1849,43 @@ function renderList(items: Array<{ label: string; count: number }>, locale: Admi
         .join('')}</ul>`;
 }
 
-function renderRecentFiles(items: Array<{ label: string; createdAt: string; updatedAt: string; filename: string; lineCount: number; fileSizeLabel: string; mtimeMs: number }>, locale: AdminLocale): string {
+function renderBarList(items: Array<{ label: string; count: number }>, locale: AdminLocale, options?: { pathResolver?: (label: string) => string }): string {
     if (items.length === 0) {
         return `<div class="empty">${escapeHtml(locale === 'ja' ? (JA_MESSAGES['memoAdmin.noData'] ?? '\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093') : 'No data')}</div>`;
     }
 
+    const maxCount = Math.max(...items.map((item) => item.count), 1);
+    return `<div class="bar-list">${items
+        .map((item) => {
+            const width = Math.max(8, Math.round((item.count / maxCount) * 100));
+            const targetPath = options?.pathResolver?.(item.label);
+            const rowAttrs = targetPath ? ` class="bar-row is-clickable" data-stats-target="${escapeHtml(targetPath)}"` : ' class="bar-row"';
+            return `<div${rowAttrs}><span class="bar-label">${escapeHtml(item.label)}</span><span class="bar-track"><span class="bar-fill" style="width: ${width}%"></span></span><span class="bar-value">${item.count}</span></div>`;
+        })
+        .join('')}</div>`;
+}
+
+function renderRecentFiles(items: MemoRecentItem[], locale: AdminLocale, options?: {
+    pinnedFilenames?: string[];
+    showPinToggle?: boolean;
+    pinLabel?: string;
+    unpinLabel?: string;
+}): string {
+    if (items.length === 0) {
+        return `<div class="empty">${escapeHtml(locale === 'ja' ? (JA_MESSAGES['memoAdmin.noData'] ?? '\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093') : 'No data')}</div>`;
+    }
+
+    const pinnedSet = new Set((options?.pinnedFilenames ?? []).map((filename) => upath.normalizeTrim(filename)));
     return `<div class="recent-list">${items
-        .map((item) => `<button class="recent-item" type="button" data-recent-file="${escapeHtml(item.filename)}"><span class="recent-title">${escapeHtml(item.label)}</span><span class="recent-meta">${escapeHtml((locale === 'ja' ? '\u4f5c\u6210' : 'Created') + ': ' + item.createdAt + ' / ' + (locale === 'ja' ? '\u66f4\u65b0' : 'Updated') + ': ' + item.updatedAt + ' / ' + (locale === 'ja' ? '\u884c\u6570' : 'Lines') + ': ' + item.lineCount + ' / ' + (locale === 'ja' ? '\u30b5\u30a4\u30ba' : 'Size') + ': ' + item.fileSizeLabel)}</span></button>`)
+        .map((item) => {
+            const isPinned = pinnedSet.has(upath.normalizeTrim(item.filename));
+            const pinButton = !options?.showPinToggle
+                ? ''
+                : isPinned
+                    ? `<button class="pin-button" type="button" data-unpin-file="${escapeHtml(item.filename)}">${escapeHtml(options?.unpinLabel ?? (locale === 'ja' ? '\u89e3\u9664' : 'Unpin'))}</button>`
+                    : `<button class="pin-button" type="button" data-pin-file="${escapeHtml(item.filename)}">${escapeHtml(options?.pinLabel ?? (locale === 'ja' ? '\u30d4\u30f3\u7559\u3081' : 'Pin'))}</button>`;
+            return `<div class="recent-item"><button class="recent-open" type="button" data-recent-file="${escapeHtml(item.filename)}"><span class="recent-title">${escapeHtml(item.title)}</span>${item.title !== item.pathLabel ? `<span class="recent-path">${escapeHtml(item.pathLabel)}</span>` : ''}<span class="recent-meta">${escapeHtml((locale === 'ja' ? '\u4f5c\u6210' : 'Created') + ': ' + item.createdAt + ' / ' + (locale === 'ja' ? '\u66f4\u65b0' : 'Updated') + ': ' + item.updatedAt + ' / ' + (locale === 'ja' ? '\u884c\u6570' : 'Lines') + ': ' + item.lineCount + ' / ' + (locale === 'ja' ? '\u30b5\u30a4\u30ba' : 'Size') + ': ' + item.fileSizeLabel)}</span></button>${pinButton}</div>`;
+        })
         .join('')}</div>`;
 }
 
@@ -1482,6 +1910,8 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.createWorkspace': '\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u3092\u4f5c\u6210',
     'memoAdmin.createWorkspaceTooltip': '\u81ea\u52d5\u8d77\u52d5\u7528\u306e .code-workspace \u3092\u751f\u6210\u3057\u307e\u3059\u3002VS Code \u306b\u95a2\u9023\u4ed8\u3051\u3059\u308b\u3068\u30c0\u30d6\u30eb\u30af\u30ea\u30c3\u30af\u3067 Memo: Admin \u30e2\u30fc\u30c9\u3067\u958b\u3051\u307e\u3059',
     'memoAdmin.workspaceHelp': '\u81ea\u52d5\u8d77\u52d5\u30d5\u30a1\u30a4\u30eb: \u3053\u306e\u30e1\u30e2\u30d5\u30a9\u30eb\u30c0\u3092\u958b\u304d Memo: Admin \u304b\u3089\u59cb\u3081\u308b .code-workspace \u3092\u4f5c\u6210\u3057\u307e\u3059\u3002VS Code \u306b\u95a2\u9023\u4ed8\u3051\u3067\u304d\u307e\u3059',
+    'memoAdmin.shortcutHelp': '\u30ad\u30fc\u30dc\u30fc\u30c9\u30b7\u30e7\u30fc\u30c8\u30ab\u30c3\u30c8\u306e\u5909\u66f4\u306f\u3001\u30ad\u30fc\u30dc\u30fc\u30c9\u30b7\u30e7\u30fc\u30c8\u30ab\u30c3\u30c8\u753b\u9762\u307e\u305f\u306f keybindings.json \u304b\u3089\u884c\u3044\u307e\u3059',
+    'memoAdmin.openKeyboardShortcuts': '\u30ad\u30fc\u30dc\u30fc\u30c9\u30b7\u30e7\u30fc\u30c8\u30ab\u30c3\u30c8',
     'memoAdmin.memoRoot': '\u30e1\u30e2\u4fdd\u5b58\u5148',
     'memoAdmin.tips': 'Tips',
     'memoAdmin.currentDateDir': '\u4eca\u65e5\u306e\u4fdd\u5b58\u5148\u30d5\u30a9\u30eb\u30c0',
@@ -1504,12 +1934,17 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.themeHint': '\u8868\u793a\u8a2d\u5b9a\u306f VS Code \u306e\u8a2d\u5b9a\u753b\u9762\u304b\u3089\u5909\u66f4\u3067\u304d\u307e\u3059\u3002',
     'memoAdmin.recentHistory': '\u76f4\u8fd1\u5c65\u6b74',
     'memoAdmin.latest8Updated': '\u66f4\u65b0\u304c\u65b0\u3057\u3044 8 \u4ef6',
+    'memoAdmin.pinnedMemos': '\u30d4\u30f3\u7559\u3081\u30e1\u30e2',
+    'memoAdmin.pinnedCaption': '\u56fa\u5b9a\u30a2\u30af\u30bb\u30b9',
+    'memoAdmin.pin': '\u30d4\u30f3\u7559\u3081',
+    'memoAdmin.unpin': '\u89e3\u9664',
     'memoAdmin.monthlyCounts': '\u6708\u5225\u4ef6\u6570',
-    'memoAdmin.latest12': '\u76f4\u8fd1 12 \u4ef6',
+    'memoAdmin.latest12': '\u76f4\u8fd1 12 \u304b\u6708',
     'memoAdmin.yearlyCounts': '\u5e74\u5225\u4ef6\u6570',
     'memoAdmin.byCreatedAt': '\u4f5c\u6210\u65e5\u30d9\u30fc\u30b9',
     'memoAdmin.folderCounts': '\u30d5\u30a9\u30eb\u30c0\u5225\u4ef6\u6570',
-    'memoAdmin.topFolders': '\u4e0a\u4f4d 12 \u30d5\u30a9\u30eb\u30c0',
+    'memoAdmin.topFolders': '\u30d5\u30a9\u30eb\u30c0\u540d\u964d\u9806',
+    'memoAdmin.moreStats': '\u8a73\u7d30\u7d71\u8a08',
     'memoAdmin.appearanceLight': '\u30e9\u30a4\u30c8',
     'memoAdmin.appearanceDark': '\u30c0\u30fc\u30af',
     'memoAdmin.appearanceSystem': '\u30b7\u30b9\u30c6\u30e0',
@@ -1520,6 +1955,7 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.themeMono': '\u30e2\u30ce\u30af\u30ed',
     'memoAdmin.themeForest': '\u30d5\u30a9\u30ec\u30b9\u30c8',
     'memoAdmin.noData': '\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093',
+    'memoAdmin.refresh': '\u66f4\u65b0',
     'memoAdmin.repoLink': 'GitHub/mmiyaji',
     'memoAdmin.forkedFrom': 'forked from'
 };

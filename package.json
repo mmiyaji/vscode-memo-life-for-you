@@ -2,7 +2,7 @@
   "name": "vscode-memo-life-for-you",
   "displayName": "vscode-memo-life-for-you",
   "description": "This extension is for writing notes on VS Code. Inspired by memo (Memo Life For You)",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "satokaz",
   "engines": {
     "vscode": "^1.90.0"
@@ -92,6 +92,28 @@
         "title": "%extension.memoAdmin.title%"
       }
     ],
+    "keybindings": [
+      {
+        "command": "extension.memoNew",
+        "key": "ctrl+alt+n",
+        "when": "editorTextFocus || !editorFocus"
+      },
+      {
+        "command": "extension.memoQuick",
+        "key": "ctrl+alt+t",
+        "when": "editorTextFocus || !editorFocus"
+      },
+      {
+        "command": "extension.memoGrep",
+        "key": "ctrl+alt+g",
+        "when": "editorTextFocus || !editorFocus"
+      },
+      {
+        "command": "extension.memoAdmin",
+        "key": "ctrl+alt+m",
+        "when": "editorTextFocus || !editorFocus"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {
@@ -156,7 +178,7 @@
         },
         "memo-life-for-you.dateFormat": {
           "type": "string",
-          "default": "yyyy-MM-dd ddd HH:mm",
+          "default": "yyyy-MM-dd HH:mm",
           "description": "%dateFormat.desc%"
         },
         "memo-life-for-you.insertISOWeek": {
@@ -226,14 +248,15 @@
         },
         "memo-life-for-you.memoGrepViewMode": {
           "type": "string",
-          "enum": [
-            "quickPick",
-            "outputChannel",
-            "both"
-          ],
-          "default": "quickPick",
-          "description": "%memoGrepViewMode.desc%"
-        },
+              "enum": [
+                "quickPick",
+                "outputChannel",
+                "readOnlyDocument",
+                "editableDocument"
+              ],
+            "default": "quickPick",
+            "description": "%memoGrepViewMode.desc%"
+          },
         "memo-life-for-you.memoGrepUseRipGrepConfigFilePath": {
           "type": "string",
           "default": "",
@@ -298,23 +321,41 @@
           "description": "%memoAdminUseGradient.desc%"
         },
         "memo-life-for-you.memoAdminOpenMode": {
-          "type": "string",
-          "enum": [
-            "currentWindow",
-            "newWindow"
-          ],
-          "default": "newWindow",
-          "description": "%memoAdminOpenMode.desc%"
-        },
+            "type": "string",
+            "enum": [
+              "currentWindow",
+              "newWindow"
+            ],
+            "default": "newWindow",
+            "markdownDescription": "%memoAdminOpenMode.desc%"
+          },
         "memo-life-for-you.memoAdminOpenOnStartup": {
-          "type": "boolean",
-          "default": false,
-          "description": "%memoAdminOpenOnStartup.desc%"
-        },
-        "memo-life-for-you.openMarkdownPreviewUseMPE": {
-          "type": "boolean",
-          "default": false,
-          "description": "%openMarkdownPreviewUseMPE.desc%"
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "%memoAdminOpenOnStartup.desc%"
+          },
+        "memo-life-for-you.memoAdminRecentTitleMode": {
+            "type": "string",
+            "enum": [
+              "path",
+              "content",
+              "both"
+            ],
+            "default": "path",
+            "description": "%memoAdminRecentTitleMode.desc%"
+          },
+        "memo-life-for-you.memoPinnedFiles": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "%memoPinnedFiles.desc%"
+          },
+          "memo-life-for-you.openMarkdownPreviewUseMPE": {
+            "type": "boolean",
+            "default": false,
+            "description": "%openMarkdownPreviewUseMPE.desc%"
         },
         "memo-life-for-you.openChromeCustomizeURL": {
           "type": "string",

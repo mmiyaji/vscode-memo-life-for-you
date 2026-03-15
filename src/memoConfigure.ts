@@ -54,6 +54,8 @@ export class memoConfigure {
     public memoAdminUseGradient: boolean;
     public memoAdminOpenMode: string;
     public memoAdminOpenOnStartup: boolean;
+    public memoAdminRecentTitleMode: string;
+    public memoPinnedFiles: string[];
     public openMarkdownPreviewUseMPE: boolean;
     public memoOpenChromeCustomizeURL: string;
     public memoTyporaExecPath: string;
@@ -176,6 +178,8 @@ export class memoConfigure {
         this.memoAdminUseGradient = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminUseGradient');
         this.memoAdminOpenMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminOpenMode');
         this.memoAdminOpenOnStartup = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminOpenOnStartup');
+        this.memoAdminRecentTitleMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminRecentTitleMode');
+        this.memoPinnedFiles = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('memoPinnedFiles');
         this.openMarkdownPreviewUseMPE = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openMarkdownPreviewUseMPE');
         this.memoOpenChromeCustomizeURL = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('openChromeCustomizeURL');
         this.memoTyporaExecPath = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('TyporaExecPath');
