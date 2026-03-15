@@ -334,10 +334,20 @@
             "default": false,
             "markdownDescription": "%memoAdminOpenOnStartup.desc%"
           },
-        "memo-life-for-you.openMarkdownPreviewUseMPE": {
-          "type": "boolean",
-          "default": false,
-          "description": "%openMarkdownPreviewUseMPE.desc%"
+        "memo-life-for-you.memoAdminRecentTitleMode": {
+            "type": "string",
+            "enum": [
+              "path",
+              "content",
+              "both"
+            ],
+            "default": "path",
+            "description": "%memoAdminRecentTitleMode.desc%"
+          },
+          "memo-life-for-you.openMarkdownPreviewUseMPE": {
+            "type": "boolean",
+            "default": false,
+            "description": "%openMarkdownPreviewUseMPE.desc%"
         },
         "memo-life-for-you.openChromeCustomizeURL": {
           "type": "string",
