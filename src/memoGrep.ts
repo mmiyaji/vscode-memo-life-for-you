@@ -12,13 +12,35 @@ import { getMemoDateDirectory, getMemoRelativeDirectoryLabel } from './memoPath'
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
+class MemoGrepDocumentProvider implements vscode.TextDocumentContentProvider {
+    private readonly contents = new Map<string, string>();
+
+    public provideTextDocumentContent(uri: vscode.Uri): string {
+        return this.contents.get(uri.toString()) ?? '';
+    }
+
+    public setContent(uri: vscode.Uri, content: string): void {
+        this.contents.set(uri.toString(), content);
+    }
+}
+
 export class memoGrep extends memoConfigure {
     private _disposable: vscode.Disposable;
     private memoGrepChannel: vscode.OutputChannel;
+    private static readonly grepDocumentScheme = 'memo-grep';
+    private static grepDocumentProvider: MemoGrepDocumentProvider | undefined;
+    private static grepDocumentRegistration: vscode.Disposable | undefined;
 
     constructor() {
         super();
         this.memoGrepChannel = vscode.window.createOutputChannel("Memo Grep");
+        if (!memoGrep.grepDocumentProvider) {
+            memoGrep.grepDocumentProvider = new MemoGrepDocumentProvider();
+            memoGrep.grepDocumentRegistration = vscode.workspace.registerTextDocumentContentProvider(
+                memoGrep.grepDocumentScheme,
+                memoGrep.grepDocumentProvider
+            );
+        }
     }
 
     public async Grep() {
@@ -32,6 +54,7 @@ export class memoGrep extends memoConfigure {
 
         const rgPath = this.resolveRipgrepPath();
         this.readConfig();
+        const grepViewMode = this.getNormalizedGrepViewMode();
 
         const searchRoot = await this.pickSearchRoot();
         if (!searchRoot) {
@@ -149,16 +172,23 @@ export class memoGrep extends memoConfigure {
                     mtime: null
                 });
 
-                this.memoGrepChannel.appendLine(`${index}: file://${filename}${process.platform === 'linux' ? ":" : "#"}${line}:${col}`);
-                this.memoGrepChannel.appendLine(vlist.replace(/^(.*?)(?=:)/gm, '').replace(/^:/g, 'Line ').toString());
-                this.memoGrepChannel.appendLine('');
             });
 
-            if (this.memoGrepViewMode === 'outputChannel' || this.memoGrepViewMode === 'both') {
+            if (grepViewMode === 'outputChannel' || grepViewMode === 'both') {
                 this.showResultsInOutputChannel(keyword, searchRoot, items.length, list);
-                if (this.memoGrepViewMode === 'outputChannel') {
+                if (grepViewMode === 'outputChannel') {
                     return;
                 }
+            }
+
+            if (grepViewMode === 'readOnlyDocument') {
+                void this.showResultsInVirtualDocument(keyword, searchRoot, items);
+                return;
+            }
+
+            if (grepViewMode === 'editableDocument') {
+                void this.showResultsInUntitledDocument(keyword, searchRoot, items);
+                return;
             }
 
             vscode.window.showQuickPick<items>(items, {
@@ -382,6 +412,75 @@ export class memoGrep extends memoConfigure {
             this.memoGrepChannel.appendLine(`${index}: ${result}`);
         });
         this.memoGrepChannel.show(true);
+    }
+
+    private getNormalizedGrepViewMode(): 'quickPick' | 'outputChannel' | 'both' | 'readOnlyDocument' | 'editableDocument' {
+        switch (this.memoGrepViewMode) {
+            case 'both':
+                return 'both';
+            case 'virtualDocument':
+            case 'readOnlyDocument':
+                return 'readOnlyDocument';
+            case 'untitledDocument':
+            case 'editableDocument':
+                return 'editableDocument';
+            case 'outputChannel':
+                return 'outputChannel';
+            default:
+                return 'quickPick';
+        }
+    }
+
+    private async showResultsInVirtualDocument(keyword: string, searchRoot: string, results: items[]): Promise<void> {
+        if (!memoGrep.grepDocumentProvider) {
+            return;
+        }
+
+        const uri = vscode.Uri.parse(`${memoGrep.grepDocumentScheme}:Memo%20Grep%20${Date.now()}.md`);
+        const content = this.buildVirtualDocumentContent(keyword, searchRoot, results);
+        memoGrep.grepDocumentProvider.setContent(uri, content);
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document, {
+            preview: false,
+            preserveFocus: false,
+            viewColumn: vscode.ViewColumn.Active
+        });
+    }
+
+    private async showResultsInUntitledDocument(keyword: string, searchRoot: string, results: items[]): Promise<void> {
+        const content = this.buildVirtualDocumentContent(keyword, searchRoot, results);
+        const uri = vscode.Uri.parse(`untitled:Memo Grep ${dateFns.format(new Date(), 'yyyy-MM-dd HHmmss')}.md`);
+        const document = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(document, {
+            preview: false,
+            preserveFocus: false,
+            viewColumn: vscode.ViewColumn.Active
+        });
+        await editor.edit((editBuilder) => {
+            editBuilder.insert(new vscode.Position(0, 0), content);
+        });
+    }
+
+    private buildVirtualDocumentContent(keyword: string, searchRoot: string, results: items[]): string {
+        const lines = [
+            '# Memo: Grep',
+            '',
+            `- Keyword: ${keyword}`,
+            `- Scope: ${getMemoRelativeDirectoryLabel(this.memodir, searchRoot)}`,
+            `- Results: ${results.length}`,
+            ''
+        ];
+
+        results.forEach((result) => {
+            const relativePath = getMemoRelativeDirectoryLabel(this.memodir, result.filename);
+            const fileUri = vscode.Uri.file(result.filename).with({ fragment: `L${result.ln},${result.col}` }).toString();
+            const summary = result.description.replace(/^\$\((.*?)\)\s*/, '');
+            lines.push(`- [${relativePath}:${result.ln}:${result.col}](${fileUri})`);
+            lines.push(`  - ${summary}`);
+        });
+
+        lines.push('');
+        return lines.join('\n');
     }
 
     dispose() {

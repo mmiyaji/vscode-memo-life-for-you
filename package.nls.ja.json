@@ -27,7 +27,7 @@
     "openMarkdownPreview.desc": "エディタでファイルを開くと同時に組み込み Markdown Preview も開きます。`Markdown Preview Enhanced` 拡張がインストールされていて `openMarkdownPreviewUseMPE` が `true` の場合はそちらを使います。",
     "listSortOrder.desc": "`Memo: List` の並び順です。`filename` / `birthtime` / `mtime` から選べます。",
     "memoGrepUseRipGrepConfigFile.desc": "ripgrep の設定ファイル (`.ripgreprc`) を使用するかどうかです。",
-    "memoGrepViewMode.desc": "`Memo: Grep` の結果表示方法です。`quickPick` はドロップダウン、`outputChannel` はテキスト風の出力ペイン、`both` は両方に表示します。",
+    "memoGrepViewMode.desc": "`Memo: Grep` の結果表示方法です。`quickPick` はドロップダウン、`outputChannel` はテキスト風の出力ペイン、`readOnlyDocument` は読み取り専用の一時ドキュメント、`editableDocument` は編集可能な未保存ドキュメントで開きます。",
     "memoGrepUseRipGrepConfigFilePath.desc": "`memoGrepUseRipGrepConfigFile` を `true` にし、特定の場所にある ripgrep 設定ファイルを使いたい場合はそのパスを指定します。",
     "memoTodoUserePattern.desc": "Todo と認識するパターンを定義します (既定: ^.*@todo.*?:)。",
     "memoNewFilenameFromClipboard.desc": "新規ファイル名に OS クリップボードの内容を使います。",

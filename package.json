@@ -248,14 +248,15 @@
         },
         "memo-life-for-you.memoGrepViewMode": {
           "type": "string",
-          "enum": [
-            "quickPick",
-            "outputChannel",
-            "both"
-          ],
-          "default": "quickPick",
-          "description": "%memoGrepViewMode.desc%"
-        },
+              "enum": [
+                "quickPick",
+                "outputChannel",
+                "readOnlyDocument",
+                "editableDocument"
+              ],
+            "default": "quickPick",
+            "description": "%memoGrepViewMode.desc%"
+          },
         "memo-life-for-you.memoGrepUseRipGrepConfigFilePath": {
           "type": "string",
           "default": "",
