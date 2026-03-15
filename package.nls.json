@@ -41,6 +41,7 @@
     "memoAdminOpenMode.desc": "Choose how `Memo: Admin` opens. `currentWindow` uses the current VS Code window, `newWindow` opens the memo root as the top-level folder in a dedicated window.\n\nKeyboard shortcuts are edited from the Keyboard Shortcuts editor or `keybindings.json`.",
     "memoAdminOpenOnStartup.desc": "Open `Memo: Admin` automatically when VS Code starts for this window or workspace.\n\nKeyboard shortcuts are edited from the Keyboard Shortcuts editor or `keybindings.json`.",
     "memoAdminRecentTitleMode.desc": "Choose how titles are shown in recent history. `path` shows the relative file path, `content` uses the first Markdown heading or the first text lines, `both` shows both.",
+    "memoPinnedFiles.desc": "Pinned memo file paths shown in the Memo: Admin screen.",
     "memoConfDir.desc": "Directory path used for memo configuration files.",
     "openMarkdownPreviewUseMPE.desc": "If `memo-life-for-you.openMarkdownPreview` is set to `true`, use `Markdown Preview Enhanced` (https://marketplace.visualstudio.com/items?itemName=shd101wyy.markdown-preview-enhanced) to open preview (default: false)",
     "openChromeCustomizeURL.desc": "Customize Chrome's URL to be launched with Memo: Open Chrome with <html contenteditable> command.",

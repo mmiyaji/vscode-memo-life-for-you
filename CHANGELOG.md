@@ -2,6 +2,11 @@
 
 All notable changes to the "vscode-memo-life-for-you" extension will be documented in this file.
 
+## 0.6.2
+
+- Added pin/unpin support in Memo Admin recent history
+- Added keyboard shortcut guidance from Memo Admin
+
 ## 0.6.1
 
 * fork: add fork note and customization summary for this personal branch

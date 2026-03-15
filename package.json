@@ -2,7 +2,7 @@
   "name": "vscode-memo-life-for-you",
   "displayName": "vscode-memo-life-for-you",
   "description": "This extension is for writing notes on VS Code. Inspired by memo (Memo Life For You)",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "publisher": "satokaz",
   "engines": {
     "vscode": "^1.90.0"
@@ -178,7 +178,7 @@
         },
         "memo-life-for-you.dateFormat": {
           "type": "string",
-          "default": "yyyy-MM-dd ddd HH:mm",
+          "default": "yyyy-MM-dd HH:mm",
           "description": "%dateFormat.desc%"
         },
         "memo-life-for-you.insertISOWeek": {
@@ -343,6 +343,14 @@
             ],
             "default": "path",
             "description": "%memoAdminRecentTitleMode.desc%"
+          },
+        "memo-life-for-you.memoPinnedFiles": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "description": "%memoPinnedFiles.desc%"
           },
           "memo-life-for-you.openMarkdownPreviewUseMPE": {
             "type": "boolean",

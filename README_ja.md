@@ -228,7 +228,7 @@ templatebodyfile = ""
    * ex: Windows: `"C:/Users/Sato/go/bin/memo.exe"`
 * `"memo-life-for-you.serve-addr"`: server address (Serve コマンドで default: 8080 以外のポートを利用する場合)
    * `memo serve --addr :8083` = ex: "memo-life-for-you.serve-addr": "8083" (default: "8080")
-* `"memo-life-for-you.dateFormat"`: date-fns のフォーマット形式 See: https://date-fns.org/v2.16.1/docs/format (default: "yyyy-MM-dd ddd HH:mm")
+* `"memo-life-for-you.dateFormat"`: date-fns のフォーマット形式 See: https://date-fns.org/v2.16.1/docs/format (default: "yyyy-MM-dd HH:mm")
 * `memo-life-for-you.insertISOWeek`: "Memo: Today's quick Memo" コマンド実行時に挿入されるタイトルに ISO Week を追加します
 * `memo-life-for-you.insertEmoji`: "Memo: Today's quick Memo" コマンド実行時に挿入されるタイトルに random-Emoji を追加します
 * `memo-life-for-you.displayFileBirthTime`: `Memo:リスト/編集` の情報に、ファイル作成日を追加表示します。(default: false)
