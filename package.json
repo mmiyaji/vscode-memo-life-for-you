@@ -2,7 +2,7 @@
   "name": "memo-life-for-you-admin",
   "displayName": "Memo Life For You Admin",
   "description": "Daily memo workflow for VS Code with date-based folders, search tools, and a memo admin dashboard.",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "publisher": "mmiyaji",
   "license": "MIT",
   "engines": {

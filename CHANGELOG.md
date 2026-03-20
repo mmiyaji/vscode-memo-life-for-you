@@ -2,6 +2,12 @@
 
 All notable changes to the "vscode-memo-life-for-you" extension will be documented in this file.
 
+## 0.6.3
+
+- Added Node-based unit tests for memo path helpers and Memo Admin rendering helpers
+- Added GitHub Actions workflows for CI builds and release packaging
+- Refactored Memo Admin HTML helpers into a separately testable module
+
 ## 0.6.2
 
 - Added pin/unpin support in Memo Admin recent history
