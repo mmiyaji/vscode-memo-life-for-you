@@ -9,6 +9,7 @@ import * as os from 'os';
 import * as dateFns from 'date-fns';
 import { items, memoConfigure } from './memoConfigure';
 import { getMemoDateDirectory, getMemoRelativeDirectoryLabel } from './memoPath';
+import { MemoIndex } from './memoIndex';
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
@@ -382,6 +383,11 @@ export class memoGrep extends memoConfigure {
     }
 
     private listDirectories(dir: string, result: string[] = []): string[] {
+        const index = MemoIndex.getInstance();
+        if (index && upath.normalizeTrim(index.getMemodir()) === upath.normalizeTrim(dir)) {
+            return index.getDirectories();
+        }
+
         const dirents = fs.readdirSync(dir, { withFileTypes: true });
         for (const dirent of dirents) {
             if (!dirent.isDirectory()) {

@@ -40,7 +40,6 @@
     "memoAdminUseGradient.desc": "`Memo: Admin` 画面でアクセントグラデーション背景を有効にします。",
     "memoAdminOpenMode.desc": "`Memo: Admin` の開き方です。`currentWindow` は現在の VS Code ウィンドウ、`newWindow` はメモフォルダをトップにした専用ウィンドウで開きます。\n\nショートカットはキーボードショートカット画面または `keybindings.json` から編集します。",
     "memoAdminOpenOnStartup.desc": "このウィンドウまたはワークスペース起動時に `Memo: Admin` を自動表示します。\n\nショートカットはキーボードショートカット画面または `keybindings.json` から編集します。",
-    "memoAdminRecentTitleMode.desc": "直近履歴のタイトル表示方法です。`path` は相対パス、`content` は Markdown の最初の見出しかテキストの先頭数行、`both` は両方を表示します。",
     "memoPinnedFiles.desc": "`Memo: Admin` 画面に表示するピン留めメモのファイルパス一覧です。",
     "memoConfDir.desc": "メモ用設定ファイルを配置するディレクトリパスです。",
     "openMarkdownPreviewUseMPE.desc": "`memo-life-for-you.openMarkdownPreview` が `true` の場合に `Markdown Preview Enhanced` を使ってプレビューを開きます (既定: false)。",

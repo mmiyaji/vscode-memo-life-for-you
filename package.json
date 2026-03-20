@@ -345,16 +345,6 @@
           "default": false,
           "markdownDescription": "%memoAdminOpenOnStartup.desc%"
         },
-        "memo-life-for-you.memoAdminRecentTitleMode": {
-          "type": "string",
-          "enum": [
-            "path",
-            "content",
-            "both"
-          ],
-          "default": "path",
-          "description": "%memoAdminRecentTitleMode.desc%"
-        },
         "memo-life-for-you.memoPinnedFiles": {
           "type": "array",
           "default": [],

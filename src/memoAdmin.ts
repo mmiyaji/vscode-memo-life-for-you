@@ -8,6 +8,7 @@ import * as nls from 'vscode-nls';
 import { memoConfigure } from './memoConfigure';
 import { getMemoDateDirectory, getMemoRelativeDirectoryLabel } from './memoPath';
 import { AdminLocale, escapeHtml, MemoRecentItem, renderBarList, renderRecentFiles } from './memoAdminRender';
+import { MemoIndex, FileMeta } from './memoIndex';
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
@@ -31,6 +32,37 @@ export class memoAdmin extends memoConfigure {
     private static currentPanel: vscode.WebviewPanel | undefined;
     private static openingPanelPromise: Promise<void> | undefined;
     private static statsCache: MemoStatsCache | undefined;
+    private static memoIndex: MemoIndex | undefined;
+    private static indexDisposable: vscode.Disposable | undefined;
+
+    public async initializeIndex(context: vscode.ExtensionContext): Promise<void> {
+        this.readConfig();
+        if (!this.memodir || !fs.existsSync(this.memodir)) {
+            return;
+        }
+        await memoAdmin.disposeIndex();
+        memoAdmin.memoIndex = await MemoIndex.create(this.memodir, this.memoListDisplayExtname);
+        memoAdmin.indexDisposable = memoAdmin.memoIndex.startWatching();
+        context.subscriptions.push(memoAdmin.indexDisposable);
+    }
+
+    public static async flushIndex(): Promise<void> {
+        if (memoAdmin.memoIndex) {
+            await memoAdmin.memoIndex.flush();
+        }
+    }
+
+    public static async disposeIndex(): Promise<void> {
+        if (memoAdmin.memoIndex) {
+            await memoAdmin.memoIndex.flush();
+            memoAdmin.memoIndex.dispose();
+            memoAdmin.memoIndex = undefined;
+        }
+        if (memoAdmin.indexDisposable) {
+            memoAdmin.indexDisposable.dispose();
+            memoAdmin.indexDisposable = undefined;
+        }
+    }
 
     public async Show(context: vscode.ExtensionContext) {
         if (memoAdmin.currentPanel) {
@@ -109,6 +141,9 @@ export class memoAdmin extends memoConfigure {
                     break;
                 case 'refreshAdmin':
                     this.invalidateStatsCache();
+                    if (memoAdmin.memoIndex) {
+                        await memoAdmin.memoIndex.sync();
+                    }
                     this.renderPanel(panel, context);
                     break;
                 case 'openStatsTarget':
@@ -225,6 +260,28 @@ export class memoAdmin extends memoConfigure {
                         }
                         break;
                     }
+                    case 'indexRebuild':
+                        if (memoAdmin.memoIndex) {
+                            const result = await memoAdmin.memoIndex.rebuild();
+                            vscode.window.showInformationMessage(localize('memoAdmin.indexRebuilt', 'Index rebuilt: {0} entries', result.entries));
+                            this.invalidateStatsCache();
+                            this.renderPanel(panel, context);
+                        }
+                        break;
+                    case 'indexFlush':
+                        if (memoAdmin.memoIndex) {
+                            await memoAdmin.memoIndex.flush();
+                            vscode.window.showInformationMessage(localize('memoAdmin.indexFlushed', 'Index saved to disk'));
+                            this.renderPanel(panel, context);
+                        }
+                        break;
+                    case 'indexSync':
+                        if (memoAdmin.memoIndex) {
+                            await memoAdmin.memoIndex.sync();
+                            this.invalidateStatsCache();
+                            this.renderPanel(panel, context);
+                        }
+                        break;
                 }
             });
 
@@ -435,7 +492,6 @@ export class memoAdmin extends memoConfigure {
             memodir: this.normalizeWorkspacePath(this.memodir),
             extnames: this.memoListDisplayExtname,
             datePathFormat: this.memoDatePathFormat,
-            recentTitleMode: this.memoAdminRecentTitleMode,
             pinnedFiles: this.memoPinnedFiles
         });
         const now = Date.now();
@@ -445,27 +501,47 @@ export class memoAdmin extends memoConfigure {
             return memoAdmin.statsCache.stats;
         }
 
-        const files = this.readFilesRecursively(this.memodir)
-            .filter((filename) => this.memoListDisplayExtname.includes(upath.extname(filename).replace(/^\./, '')));
-
         const yearMap = new Map<string, number>();
         const monthMap = new Map<string, number>();
         const folderMap = new Map<string, number>();
 
-        const recentCandidates = files.map((filename) => {
-            const stat = fs.statSync(filename);
-            const yearLabel = dateFns.format(stat.birthtime, 'yyyy');
-            const monthLabel = dateFns.format(stat.birthtime, 'yyyy/MM');
-            const folderLabel = getMemoRelativeDirectoryLabel(this.memodir, upath.dirname(filename));
+        let recentCandidates: MemoRecentItem[];
 
-            yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
-            monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
-            folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
+        if (memoAdmin.memoIndex) {
+            const entries = memoAdmin.memoIndex.getEntries();
+            const items: MemoRecentItem[] = [];
+            for (const [relativePath, meta] of entries) {
+                const filename = memoAdmin.memoIndex.toAbsolutePath(relativePath);
+                const birthDate = new Date(meta.birthtime);
+                const yearLabel = dateFns.format(birthDate, 'yyyy');
+                const monthLabel = dateFns.format(birthDate, 'yyyy/MM');
+                const folderLabel = getMemoRelativeDirectoryLabel(this.memodir, upath.dirname(filename));
 
-            return this.createRecentFileEntry(filename, stat);
-        })
-            .sort((a, b) => b.mtimeMs - a.mtimeMs)
-            .slice(0, 8);
+                yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
+                monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
+                folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
+
+                items.push(this.createRecentFileEntryFromMeta(filename, meta));
+            }
+            recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 8);
+        } else {
+            const files = this.readFilesRecursively(this.memodir)
+                .filter((filename) => this.memoListDisplayExtname.includes(upath.extname(filename).replace(/^\./, '')));
+
+            const items = files.map((filename) => {
+                const stat = fs.statSync(filename);
+                const yearLabel = dateFns.format(stat.birthtime, 'yyyy');
+                const monthLabel = dateFns.format(stat.birthtime, 'yyyy/MM');
+                const folderLabel = getMemoRelativeDirectoryLabel(this.memodir, upath.dirname(filename));
+
+                yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
+                monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
+                folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
+
+                return this.createRecentFileEntry(filename, stat);
+            });
+            recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 8);
+        }
 
         const recentFiles = recentCandidates;
         const pinnedFiles = (this.memoPinnedFiles ?? [])
@@ -477,8 +553,13 @@ export class memoAdmin extends memoConfigure {
             })
             .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
+        let totalFiles = 0;
+        for (const count of yearMap.values()) {
+            totalFiles += count;
+        }
+
         const stats = {
-            totalFiles: files.length,
+            totalFiles,
             yearCounts: this.mapToSortedArray(yearMap),
             monthCounts: this.mapToSortedArray(monthMap).slice(0, 12),
             folderCounts: this.mapToSortedArray(folderMap).slice(0, 12),
@@ -534,7 +615,7 @@ export class memoAdmin extends memoConfigure {
         const pathLabel = getMemoRelativeDirectoryLabel(this.memodir, filename);
         return {
             label: pathLabel,
-            title: this.getRecentHistoryTitle(filename, pathLabel),
+            title: pathLabel,
             pathLabel,
             createdAt: dateFns.format(stat.birthtime, 'yyyy-MM-dd HH:mm'),
             updatedAt: dateFns.format(stat.mtime, 'yyyy-MM-dd HH:mm'),
@@ -544,48 +625,18 @@ export class memoAdmin extends memoConfigure {
         };
     }
 
-    private getRecentHistoryTitle(filename: string, pathLabel: string): string {
-        const mode = this.memoAdminRecentTitleMode || 'path';
-        if (mode === 'path') {
-            return pathLabel;
-        }
-
-        const contentTitle = this.extractRecentContentTitle(filename);
-        if (mode === 'content') {
-            return contentTitle || pathLabel;
-        }
-
-        return contentTitle ? `${contentTitle}` : pathLabel;
-    }
-
-    private extractRecentContentTitle(filename: string): string {
-        try {
-            const content = fs.readFileSync(filename, 'utf8');
-            const ext = upath.extname(filename).toLowerCase();
-            const lines = content.split(/\r\n|\r|\n/).map((line) => line.trim()).filter(Boolean);
-            if (lines.length === 0) {
-                return '';
-            }
-
-            if (ext === '.md') {
-                const heading = lines.find((line) => /^#{1,6}\s+/.test(line));
-                if (heading) {
-                    return this.truncateRecentTitle(heading.replace(/^#{1,6}\s+/, ''));
-                }
-            }
-
-            return this.truncateRecentTitle(lines.slice(0, 2).join(' / '));
-        } catch {
-            return '';
-        }
-    }
-
-    private truncateRecentTitle(value: string): string {
-        const normalized = value.replace(/\s+/g, ' ').trim();
-        if (normalized.length <= 72) {
-            return normalized;
-        }
-        return `${normalized.slice(0, 69)}...`;
+    private createRecentFileEntryFromMeta(filename: string, meta: FileMeta): MemoRecentItem {
+        const pathLabel = getMemoRelativeDirectoryLabel(this.memodir, filename);
+        return {
+            label: pathLabel,
+            title: pathLabel,
+            pathLabel,
+            createdAt: dateFns.format(new Date(meta.birthtime), 'yyyy-MM-dd HH:mm'),
+            updatedAt: dateFns.format(new Date(meta.mtime), 'yyyy-MM-dd HH:mm'),
+            filename,
+            mtimeMs: meta.mtime,
+            fileSizeLabel: this.formatFileSize(meta.size)
+        };
     }
 
     private getHtml(context: vscode.ExtensionContext, stats: MemoStats): string {
@@ -608,6 +659,7 @@ export class memoAdmin extends memoConfigure {
         const repositoryUrl = 'https://github.com/mmiyaji/vscode-memo-life-for-you';
         const upstreamUrl = 'https://github.com/satokaz/vscode-memo-life-for-you';
         const locale = this.getDisplayLanguage();
+        const indexStatus = memoAdmin.memoIndex?.getStatus();
         const hasValidMemoDir = !!safeMemoDir && fs.existsSync(safeMemoDir);
         const effectiveAppearance = this.getEffectiveAppearance();
         const appearanceLabel = this.getAppearanceLabel(this.memoAdminAppearance, locale);
@@ -1147,6 +1199,66 @@ export class memoAdmin extends memoConfigure {
             gap: 16px;
         }
 
+        .index-panel {
+            padding: 12px 16px;
+        }
+
+        .index-status-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .index-status-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .index-label {
+            color: var(--muted);
+            white-space: nowrap;
+            width: 140px;
+        }
+
+        .index-value {
+            color: var(--text);
+        }
+
+        .index-badge {
+            display: inline-block;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .index-badge--ok {
+            background: rgba(40, 167, 69, 0.18);
+            color: #3fb950;
+        }
+
+        .index-badge--off {
+            background: rgba(200, 200, 200, 0.12);
+            color: var(--muted);
+        }
+
+        .index-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+            flex-wrap: wrap;
+        }
+
+        .action-button--danger {
+            border-color: rgba(248, 81, 73, 0.4);
+            color: #f85149;
+        }
+
+        .action-button--danger:hover {
+            background: rgba(248, 81, 73, 0.12);
+            border-color: rgba(248, 81, 73, 0.6);
+        }
+
         .footer {
             display: flex;
             flex-wrap: wrap;
@@ -1628,6 +1740,37 @@ export class memoAdmin extends memoConfigure {
                     sizeLabel: t('memoAdmin.size', 'Size')
                 })}
             </article>
+            <details class="detail-block">
+                <summary>
+                    <span class="summary-label">
+                        <span class="summary-icon">&#9881;</span>
+                        <span>${t('memoAdmin.indexMaintenance', 'Index maintenance')}</span>
+                    </span>
+                    <span class="summary-caret">&#9660;</span>
+                </summary>
+                <div class="index-panel">
+                    <table class="index-status-table">
+                        <tbody>
+                            <tr><td class="index-label">${t('memoAdmin.indexStatus', 'Status')}</td><td class="index-value">${indexStatus ? `<span class="index-badge index-badge--ok">${t('memoAdmin.indexActive', 'Active')}</span>` : `<span class="index-badge index-badge--off">${t('memoAdmin.indexInactive', 'Inactive')}</span>`}</td></tr>
+                            ${indexStatus ? `
+                            <tr><td class="index-label">${t('memoAdmin.indexEntries', 'Indexed files')}</td><td class="index-value">${indexStatus.entries.toLocaleString()}</td></tr>
+                            <tr><td class="index-label">${t('memoAdmin.indexFileSize', 'Index size')}</td><td class="index-value">${indexStatus.indexSizeBytes > 0 ? this.formatFileSize(indexStatus.indexSizeBytes) : '-'}</td></tr>
+                            <tr><td class="index-label">${t('memoAdmin.indexWatcher', 'File watcher')}</td><td class="index-value">${indexStatus.watching ? '&#10003;' : '&#10007;'}</td></tr>
+                            <tr><td class="index-label">${t('memoAdmin.indexPrimary', 'Primary file')}</td><td class="index-value">${indexStatus.primaryExists ? '&#10003;' : '&#10007;'}</td></tr>
+                            <tr><td class="index-label">${t('memoAdmin.indexBackup', 'Backup file')}</td><td class="index-value">${indexStatus.backupExists ? '&#10003;' : '&#10007;'}</td></tr>
+                            <tr><td class="index-label">${t('memoAdmin.indexDirty', 'Unsaved changes')}</td><td class="index-value">${indexStatus.dirty ? t('memoAdmin.indexYes', 'Yes') : t('memoAdmin.indexNo', 'No')}</td></tr>
+                            ` : ''}
+                        </tbody>
+                    </table>
+                    ${indexStatus ? `
+                    <div class="index-actions">
+                        <button class="action-button" data-command="indexSync" title="${t('memoAdmin.indexSyncTooltip', 'Check for changes on disk and update the index')}">${t('memoAdmin.indexSync', 'Sync')}</button>
+                        <button class="action-button" data-command="indexFlush" title="${t('memoAdmin.indexFlushTooltip', 'Save index to disk now')}">${t('memoAdmin.indexFlush', 'Save to disk')}</button>
+                        <button class="action-button action-button--danger" data-command="indexRebuild" title="${t('memoAdmin.indexRebuildTooltip', 'Delete and rebuild the index from scratch')}">${t('memoAdmin.indexRebuild', 'Rebuild')}</button>
+                    </div>
+                    ` : ''}
+                </div>
+            </details>
         </section>
         <footer class="footer">
             <div class="footer-links">
@@ -1704,6 +1847,15 @@ export class memoAdmin extends memoConfigure {
         this.updateConfiguration();
         this.readConfig();
         panel.title = this.translate(this.getDisplayLanguage(), 'extension.memoAdmin.title', 'Memo Admin');
+
+        if (!memoAdmin.memoIndex && this.memodir && fs.existsSync(this.memodir)) {
+            this.initializeIndex(context).then(() => {
+                this.renderPanel(panel, context);
+            }).catch(() => {
+                // proceed without index
+            });
+        }
+
         try {
             panel.webview.html = this.getHtml(context, this.collectStats());
         } catch (error) {
@@ -1893,7 +2045,25 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.noData': '\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093',
     'memoAdmin.refresh': '\u66f4\u65b0',
     'memoAdmin.repoLink': 'GitHub/mmiyaji',
-    'memoAdmin.forkedFrom': 'forked from'
+    'memoAdmin.forkedFrom': 'forked from',
+    'memoAdmin.indexMaintenance': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u30e1\u30f3\u30c6\u30ca\u30f3\u30b9',
+    'memoAdmin.indexStatus': '\u30b9\u30c6\u30fc\u30bf\u30b9',
+    'memoAdmin.indexActive': '\u6709\u52b9',
+    'memoAdmin.indexInactive': '\u7121\u52b9',
+    'memoAdmin.indexEntries': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u6e08\u307f\u30d5\u30a1\u30a4\u30eb',
+    'memoAdmin.indexFileSize': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u30b5\u30a4\u30ba',
+    'memoAdmin.indexWatcher': '\u30d5\u30a1\u30a4\u30eb\u76e3\u8996',
+    'memoAdmin.indexPrimary': '\u30d7\u30e9\u30a4\u30de\u30ea\u30d5\u30a1\u30a4\u30eb',
+    'memoAdmin.indexBackup': '\u30d0\u30c3\u30af\u30a2\u30c3\u30d7\u30d5\u30a1\u30a4\u30eb',
+    'memoAdmin.indexDirty': '\u672a\u4fdd\u5b58\u306e\u5909\u66f4',
+    'memoAdmin.indexYes': '\u3042\u308a',
+    'memoAdmin.indexNo': '\u306a\u3057',
+    'memoAdmin.indexSync': '\u540c\u671f',
+    'memoAdmin.indexSyncTooltip': '\u30c7\u30a3\u30b9\u30af\u306e\u5909\u66f4\u3092\u78ba\u8a8d\u3057\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u66f4\u65b0\u3057\u307e\u3059',
+    'memoAdmin.indexFlush': '\u30c7\u30a3\u30b9\u30af\u306b\u4fdd\u5b58',
+    'memoAdmin.indexFlushTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u4eca\u3059\u3050\u30c7\u30a3\u30b9\u30af\u306b\u4fdd\u5b58\u3057\u307e\u3059',
+    'memoAdmin.indexRebuild': '\u518d\u69cb\u7bc9',
+    'memoAdmin.indexRebuildTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u524a\u9664\u3057\u3066\u6700\u521d\u304b\u3089\u4f5c\u308a\u76f4\u3057\u307e\u3059'
 };
 
 const JA_TIPS: string[] = [

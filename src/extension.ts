@@ -102,7 +102,8 @@ export function activate(context: vscode.ExtensionContext) {
 // Markdown
 }
 
-export function deactivate() {
+export async function deactivate() {
+    await memoAdmin.flushIndex();
 }
 
 async function restorePendingMemoAdmin(context: vscode.ExtensionContext, memoadmin: memoAdmin): Promise<void> {

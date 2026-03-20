@@ -6,6 +6,7 @@ import * as upath from 'upath';
 import * as dateFns from 'date-fns';
 import * as nls from 'vscode-nls';
 import { items, memoConfigure } from './memoConfigure';
+import { MemoIndex } from './memoIndex';
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
@@ -45,84 +46,82 @@ export class memoEdit extends memoConfigure {
             }
         }
 
-        try {
-            list = readdirRecursively(memodir);
-        } catch(err) {
-            console.log('err =', err);
-        }
-
-        // let listDisplayExtname: string[] = ["md", "txt"];
-        // listDisplayExtname　= [];
         // listDisplayExtname が空の場合は、強制的に .md のみ対象にする
         if (listDisplayExtname.length == 0 ) {
             listDisplayExtname = ["md"];
-        } 
+        }
 
-        // 取得したファイル一覧を整形
-        list = list.filter((v) => {
-                for (const value of listDisplayExtname){
-                    // console.log(value);
-                    if (upath.extname(v).match("." + value)) {
-                        // console.log(v);  
-                        return v;                  
-                    }   
-                }           
-        }).map((v) => {     // .map で配列の中身を操作してから新しい配列を作成する    
-            // memodir を削除したパス名を返す
-            return (v.split(upath.sep).splice(memodir.split(upath.sep).length, v.split(upath.sep).length).join(upath.sep));
-        });
+        const index_ = MemoIndex.getInstance();
+        if (index_ && upath.normalizeTrim(index_.getMemodir()) === memodir) {
+            // インデックスからファイル一覧を取得（readdir + statSync ゼロ回）
+            let idx = 0;
+            for (const [relativePath, meta] of index_.getEntries()) {
+                const filename = index_.toAbsolutePath(relativePath);
+                const birthtime = new Date(meta.birthtime);
+                const mtime = new Date(meta.mtime);
+                const statBirthtime = this.memoEditDispBtime ? dateFns.format(birthtime, 'MMM dd HH:mm, yyyy ') : "";
+                const statMtime = this.memoEditDispBtime ? dateFns.format(mtime, 'MMM dd HH:mm, yyyy ') : "";
 
-        // console.log(listDisplayExtname);
+                items.push({
+                    "label": `$(calendar) ` + relativePath,
+                    "description": "",
+                    "detail": this.memoEditDispBtime ? localize('editBirthTime', '$(heart) Create Time: {0} $(clock) Modified Time: {1} ', statBirthtime, statMtime) : "",
+                    "ln": null,
+                    "col": null,
+                    "index": idx++,
+                    "filename": filename,
+                    "isDirectory": false,
+                    "birthtime": birthtime,
+                    "mtime": mtime
+                });
 
-        // メニューアイテムの作成
-        for (let index = 0; index < list.length; index++) {
-
-            if (list[index] == '') {
-                break;
+                this.memoListChannel.appendLine('file://' + filename);
+                this.memoListChannel.appendLine('');
+            }
+        } else {
+            // フォールバック: インデックス未初期化時は従来方式
+            try {
+                list = readdirRecursively(memodir);
+            } catch(err) {
+                console.log('err =', err);
             }
 
-            let filename: string = upath.normalize(upath.join(memodir, list[index]));
-            let fileStat: fs.Stats = fs.statSync(filename);
-            let statBirthtime = this.memoEditDispBtime ? (typeof fileStat === 'string') ? "" : dateFns.format(fileStat.birthtime, 'MMM dd HH:mm, yyyy ') : "";
-            let statMtime = this.memoEditDispBtime ? (typeof fileStat === 'string') ? "" : dateFns.format(fileStat.mtime, 'MMM dd HH:mm, yyyy ') : "";
-
-            let array = fs.readFileSync(filename).toString().split('\n');
-            
-            // 先頭一行目だけなので、readline で代替してみたが、遅い...
-            // let readFirstLine = async (file) => {
-            //     let firstLine: string;
-            //     const stream = fs.createReadStream(file, { highWaterMark : 5 });
-            //     const rl = readline.createInterface({ input: stream });
-
-            //     for await (const line of rl) {              
-            //         rl.pause();
-            //         firstLine = line;
-            //         break;
-            //     }
-            //     // rl.close();
-            //     // stream.destroy();
-            //     return firstLine;
-            // };
-
-            // let array = await readFirstLine(filename);
-            // console.log("firstLine = ", array);
-            
-            items.push({
-                "label": `$(calendar) ` + list[index],
-                "description": `$(three-bars) ` + array[0],
-                "detail": this.memoEditDispBtime ? localize('editBirthTime', '$(heart) Create Time: {0} $(clock) Modified Time: {1} ', statBirthtime, statMtime) : "",
-                "ln": null,
-                "col": null,
-                "index": index,
-                "filename": upath.normalize(upath.join(memodir, list[index])),
-                "isDirectory": false,
-                "birthtime": fileStat.birthtime,
-                "mtime": fileStat.mtime
+            list = list.filter((v) => {
+                    for (const value of listDisplayExtname){
+                        if (upath.extname(v).match("." + value)) {
+                            return v;
+                        }
+                    }
+            }).map((v) => {
+                return (v.split(upath.sep).splice(memodir.split(upath.sep).length, v.split(upath.sep).length).join(upath.sep));
             });
 
-            // 出力タブへの出力を生成
-            this.memoListChannel.appendLine('file://' + upath.normalize(upath.join(memodir, list[index])) + `\t` + array[0]);
-            this.memoListChannel.appendLine('');
+            for (let index = 0; index < list.length; index++) {
+                if (list[index] == '') {
+                    break;
+                }
+
+                let filename: string = upath.normalize(upath.join(memodir, list[index]));
+                let fileStat: fs.Stats = fs.statSync(filename);
+                let statBirthtime = this.memoEditDispBtime ? dateFns.format(fileStat.birthtime, 'MMM dd HH:mm, yyyy ') : "";
+                let statMtime = this.memoEditDispBtime ? dateFns.format(fileStat.mtime, 'MMM dd HH:mm, yyyy ') : "";
+
+                items.push({
+                    "label": `$(calendar) ` + list[index],
+                    "description": "",
+                    "detail": this.memoEditDispBtime ? localize('editBirthTime', '$(heart) Create Time: {0} $(clock) Modified Time: {1} ', statBirthtime, statMtime) : "",
+                    "ln": null,
+                    "col": null,
+                    "index": index,
+                    "filename": upath.normalize(upath.join(memodir, list[index])),
+                    "isDirectory": false,
+                    "birthtime": fileStat.birthtime,
+                    "mtime": fileStat.mtime
+                });
+
+                this.memoListChannel.appendLine('file://' + upath.normalize(upath.join(memodir, list[index])));
+                this.memoListChannel.appendLine('');
+            }
         }
 
         // "memo-life-for-you.listSortOrder" で sort 対象の項目を指定
