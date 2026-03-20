@@ -19,7 +19,7 @@ type MemoStats = {
     folderCounts: Array<{ label: string; count: number }>;
     pinnedFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; fileSizeLabel: string; mtimeMs: number }>;
     recentFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; fileSizeLabel: string; mtimeMs: number }>;
-    calendarData: Record<string, number>;
+    calendarData: Record<string, { count: number; files: string[] }>;
 };
 type MemoStatsCache = {
     key: string;
@@ -547,9 +547,19 @@ export class memoAdmin extends memoConfigure {
         const yearMap = new Map<string, number>();
         const monthMap = new Map<string, number>();
         const folderMap = new Map<string, number>();
-        const dayMap = new Map<string, number>();
+        const dayMap = new Map<string, { count: number; files: string[] }>();
 
         let recentCandidates: MemoRecentItem[];
+
+        const addDayEntry = (dayLabel: string, relativePath: string) => {
+            const existing = dayMap.get(dayLabel);
+            if (existing) {
+                existing.count++;
+                existing.files.push(relativePath);
+            } else {
+                dayMap.set(dayLabel, { count: 1, files: [relativePath] });
+            }
+        };
 
         if (memoAdmin.memoIndex) {
             const entries = memoAdmin.memoIndex.getEntries();
@@ -564,7 +574,7 @@ export class memoAdmin extends memoConfigure {
 
                 yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
                 monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
-                dayMap.set(dayLabel, (dayMap.get(dayLabel) ?? 0) + 1);
+                addDayEntry(dayLabel, relativePath);
                 folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
 
                 items.push(this.createRecentFileEntryFromMeta(filename, meta));
@@ -579,11 +589,12 @@ export class memoAdmin extends memoConfigure {
                 const yearLabel = dateFns.format(stat.birthtime, 'yyyy');
                 const monthLabel = dateFns.format(stat.birthtime, 'yyyy/MM');
                 const dayLabel = dateFns.format(stat.birthtime, 'yyyy-MM-dd');
+                const relativePath = getMemoRelativeDirectoryLabel(this.memodir, filename);
                 const folderLabel = getMemoRelativeDirectoryLabel(this.memodir, upath.dirname(filename));
 
                 yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
                 monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
-                dayMap.set(dayLabel, (dayMap.get(dayLabel) ?? 0) + 1);
+                addDayEntry(dayLabel, relativePath);
                 folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
 
                 return this.createRecentFileEntry(filename, stat);
@@ -606,9 +617,9 @@ export class memoAdmin extends memoConfigure {
             totalFiles += count;
         }
 
-        const calendarData: Record<string, number> = {};
-        for (const [day, count] of dayMap) {
-            calendarData[day] = count;
+        const calendarData: Record<string, { count: number; files: string[] }> = {};
+        for (const [day, entry] of dayMap) {
+            calendarData[day] = entry;
         }
 
         const stats = {
@@ -1392,7 +1403,7 @@ export class memoAdmin extends memoConfigure {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 16px;
+            gap: 12px;
             margin-bottom: 12px;
         }
 
@@ -1425,7 +1436,7 @@ export class memoAdmin extends memoConfigure {
             text-align: center;
         }
 
-        .calendar-today-btn {
+        .calendar-small-btn {
             appearance: none;
             border: 1px solid var(--border);
             background: var(--surface-bg);
@@ -1437,10 +1448,17 @@ export class memoAdmin extends memoConfigure {
             transition: background 0.15s;
         }
 
-        .calendar-today-btn:hover {
+        .calendar-small-btn:hover {
             background: var(--accent-soft);
             border-color: var(--accent);
             color: var(--text);
+        }
+
+        .calendar-small-btn--active {
+            background: var(--accent-soft);
+            border-color: var(--accent);
+            color: var(--accent-strong);
+            font-weight: 600;
         }
 
         .calendar-grid {
@@ -1471,15 +1489,15 @@ export class memoAdmin extends memoConfigure {
             font-size: 13px;
             color: var(--text);
             cursor: pointer;
-            transition: background 0.12s, transform 0.12s;
+            transition: background 0.12s, transform 0.12s, box-shadow 0.12s;
             border: 1px solid transparent;
             padding: 6px 0;
         }
 
         .calendar-cell:hover {
-            background: var(--accent-soft);
             border-color: var(--accent);
             transform: scale(1.08);
+            z-index: 1;
         }
 
         .calendar-cell--empty {
@@ -1495,40 +1513,57 @@ export class memoAdmin extends memoConfigure {
         .calendar-cell--today {
             border-color: var(--accent);
             font-weight: 700;
+            box-shadow: inset 0 0 0 1px var(--accent);
         }
 
         .calendar-cell--sun { color: #e06060; }
         .calendar-cell--sat { color: #6090d0; }
 
-        .calendar-cell--has-memo {
-            background: var(--accent-soft);
-            font-weight: 600;
-        }
-
-        .calendar-cell--has-memo:hover {
-            background: var(--accent-soft-strong);
-        }
-
-        .calendar-dot {
-            position: absolute;
-            bottom: 2px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 4px;
-            height: 4px;
-            border-radius: 50%;
-            background: var(--accent);
-        }
-
-        .calendar-dot--multi {
-            width: 7px;
-            height: 5px;
-            border-radius: 3px;
-        }
+        /* Heatmap levels */
+        .calendar-cell--heat-1 { background: var(--accent-soft); font-weight: 600; }
+        .calendar-cell--heat-2 { background: var(--accent-soft-strong); font-weight: 600; }
+        .calendar-cell--heat-3 { background: var(--accent-border); font-weight: 600; }
+        .calendar-cell--heat-4 { background: var(--accent); font-weight: 700; color: var(--button-text); }
 
         .calendar-cell--other-month {
             color: var(--muted);
             opacity: 0.4;
+        }
+
+        /* Tooltip */
+        .calendar-tooltip {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--surface-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 11px;
+            color: var(--text);
+            white-space: nowrap;
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            pointer-events: none;
+            max-width: 260px;
+        }
+
+        .calendar-tooltip-files {
+            white-space: normal;
+            word-break: break-all;
+            color: var(--muted);
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+
+        .calendar-cell:hover .calendar-tooltip {
+            display: block;
+        }
+
+        .calendar-cell--other-month:hover .calendar-tooltip {
+            display: none;
         }
 
         ul {
@@ -1882,10 +1917,12 @@ export class memoAdmin extends memoConfigure {
                 </div>
                 <div id="calendar-container">
                     <div class="calendar-nav">
-                        <button class="calendar-nav-btn" id="cal-prev" type="button" title="${t('memoAdmin.calPrev', 'Previous month')}">&#9664;</button>
+                        <button class="calendar-nav-btn" id="cal-prev" type="button" title="${t('memoAdmin.calPrev', 'Previous')}">&#9664;</button>
                         <span class="calendar-month-label" id="cal-month-label"></span>
-                        <button class="calendar-nav-btn" id="cal-next" type="button" title="${t('memoAdmin.calNext', 'Next month')}">&#9654;</button>
-                        <button class="calendar-today-btn" id="cal-today" type="button">${t('memoAdmin.calToday', 'Today')}</button>
+                        <button class="calendar-nav-btn" id="cal-next" type="button" title="${t('memoAdmin.calNext', 'Next')}">&#9654;</button>
+                        <button class="calendar-small-btn" id="cal-today" type="button">${t('memoAdmin.calToday', 'Today')}</button>
+                        <button class="calendar-small-btn" id="cal-view-month" type="button">${t('memoAdmin.calMonth', 'Month')}</button>
+                        <button class="calendar-small-btn" id="cal-view-week" type="button">${t('memoAdmin.calWeek', 'Week')}</button>
                     </div>
                     <div class="calendar-grid" id="cal-grid"></div>
                 </div>
@@ -2005,21 +2042,64 @@ export class memoAdmin extends memoConfigure {
             const monthNames = ${locale === 'ja'
                 ? "['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']"
                 : "['January','February','March','April','May','June','July','August','September','October','November','December']"};
+            const noMemoLabel = ${locale === 'ja' ? "'メモなし'" : "'No memos'"};
+            const memoCountLabel = ${locale === 'ja' ? "function(n){ return n + ' 件'; }" : "function(n){ return n + (n===1?' memo':' memos'); }"};
 
             const grid = document.getElementById('cal-grid');
             const monthLabel = document.getElementById('cal-month-label');
+            const btnMonth = document.getElementById('cal-view-month');
+            const btnWeek = document.getElementById('cal-view-week');
             const today = new Date();
             let viewYear = today.getFullYear();
             let viewMonth = today.getMonth();
+            let viewMode = 'month';
+            let weekOffset = 0;
 
             function pad(n) { return n < 10 ? '0' + n : '' + n; }
+            function todayStr() { return today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate()); }
 
-            function render() {
+            function heatClass(count) {
+                if (count === 0) return '';
+                if (count === 1) return ' calendar-cell--heat-1';
+                if (count === 2) return ' calendar-cell--heat-2';
+                if (count <= 4) return ' calendar-cell--heat-3';
+                return ' calendar-cell--heat-4';
+            }
+
+            function tooltipHtml(dateStr, entry) {
+                const countStr = entry ? memoCountLabel(entry.count) : noMemoLabel;
+                let filesStr = '';
+                if (entry && entry.files.length > 0) {
+                    const shown = entry.files.slice(0, 5);
+                    filesStr = '<div class="calendar-tooltip-files">' + shown.join('<br>') + (entry.files.length > 5 ? '<br>...' : '') + '</div>';
+                }
+                return '<div class="calendar-tooltip"><strong>' + dateStr + '</strong> ' + countStr + filesStr + '</div>';
+            }
+
+            function cellHtml(day, dateStr, dow, isOtherMonth) {
+                const entry = calData[dateStr];
+                const count = entry ? entry.count : 0;
+                const tStr = todayStr();
+                let cls = 'calendar-cell';
+                if (isOtherMonth) cls += ' calendar-cell--other-month';
+                if (dateStr === tStr) cls += ' calendar-cell--today';
+                cls += heatClass(isOtherMonth ? 0 : count);
+                if (dow === 0) cls += ' calendar-cell--sun';
+                if (dow === 6) cls += ' calendar-cell--sat';
+                const tip = isOtherMonth ? '' : tooltipHtml(dateStr, entry);
+                return '<div class="' + cls + '" data-date="' + dateStr + '">' + day + tip + '</div>';
+            }
+
+            function updateViewButtons() {
+                btnMonth.className = 'calendar-small-btn' + (viewMode === 'month' ? ' calendar-small-btn--active' : '');
+                btnWeek.className = 'calendar-small-btn' + (viewMode === 'week' ? ' calendar-small-btn--active' : '');
+            }
+
+            function renderMonth() {
                 const firstDay = new Date(viewYear, viewMonth, 1);
                 const lastDay = new Date(viewYear, viewMonth + 1, 0);
                 const startDow = firstDay.getDay();
                 const daysInMonth = lastDay.getDate();
-                const todayStr = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
 
                 monthLabel.textContent = ${locale === 'ja' ? 'viewYear + "年 " + monthNames[viewMonth]' : 'monthNames[viewMonth] + " " + viewYear'};
 
@@ -2029,7 +2109,6 @@ export class memoAdmin extends memoConfigure {
                     html += '<div class="calendar-dow' + cls + '">' + dowLabels[d] + '</div>';
                 }
 
-                // Previous month trailing days
                 const prevLast = new Date(viewYear, viewMonth, 0);
                 const prevDays = prevLast.getDate();
                 for (let i = startDow - 1; i >= 0; i--) {
@@ -2037,48 +2116,76 @@ export class memoAdmin extends memoConfigure {
                     const m = viewMonth === 0 ? 12 : viewMonth;
                     const y = viewMonth === 0 ? viewYear - 1 : viewYear;
                     const dateStr = y + '-' + pad(m) + '-' + pad(day);
-                    const count = calData[dateStr] || 0;
                     const dow = (startDow - i - 1 + 7) % 7;
-                    let cls = 'calendar-cell calendar-cell--other-month';
-                    if (dow === 0) cls += ' calendar-cell--sun';
-                    if (dow === 6) cls += ' calendar-cell--sat';
-                    const dot = count > 0 ? '<span class="calendar-dot' + (count > 1 ? ' calendar-dot--multi' : '') + '"></span>' : '';
-                    html += '<div class="' + cls + '" data-date="' + dateStr + '">' + day + dot + '</div>';
+                    html += cellHtml(day, dateStr, dow, true);
                 }
 
-                // Current month days
                 for (let day = 1; day <= daysInMonth; day++) {
                     const dateStr = viewYear + '-' + pad(viewMonth + 1) + '-' + pad(day);
-                    const count = calData[dateStr] || 0;
                     const dow = new Date(viewYear, viewMonth, day).getDay();
-                    let cls = 'calendar-cell';
-                    if (dateStr === todayStr) cls += ' calendar-cell--today';
-                    if (count > 0) cls += ' calendar-cell--has-memo';
-                    if (dow === 0) cls += ' calendar-cell--sun';
-                    if (dow === 6) cls += ' calendar-cell--sat';
-                    const dot = count > 0 ? '<span class="calendar-dot' + (count > 1 ? ' calendar-dot--multi' : '') + '"></span>' : '';
-                    html += '<div class="' + cls + '" data-date="' + dateStr + '">' + day + dot + '</div>';
+                    html += cellHtml(day, dateStr, dow, false);
                 }
 
-                // Next month leading days
                 const totalCells = startDow + daysInMonth;
                 const trailing = (7 - (totalCells % 7)) % 7;
                 for (let day = 1; day <= trailing; day++) {
                     const m = viewMonth + 2 > 12 ? 1 : viewMonth + 2;
                     const y = viewMonth + 2 > 12 ? viewYear + 1 : viewYear;
                     const dateStr = y + '-' + pad(m) + '-' + pad(day);
-                    const count = calData[dateStr] || 0;
                     const dow = (totalCells + day - 1) % 7;
-                    let cls = 'calendar-cell calendar-cell--other-month';
-                    if (dow === 0) cls += ' calendar-cell--sun';
-                    if (dow === 6) cls += ' calendar-cell--sat';
-                    const dot = count > 0 ? '<span class="calendar-dot' + (count > 1 ? ' calendar-dot--multi' : '') + '"></span>' : '';
-                    html += '<div class="' + cls + '" data-date="' + dateStr + '">' + day + dot + '</div>';
+                    html += cellHtml(day, dateStr, dow, true);
                 }
 
                 grid.innerHTML = html;
+            }
 
-                grid.querySelectorAll('.calendar-cell:not(.calendar-cell--empty)').forEach(function(cell) {
+            function renderWeek() {
+                const base = new Date(today);
+                base.setDate(base.getDate() + weekOffset * 7);
+                const startOfWeek = new Date(base);
+                startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(endOfWeek.getDate() + 6);
+
+                const sMonth = monthNames[startOfWeek.getMonth()];
+                const eMonth = monthNames[endOfWeek.getMonth()];
+                if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
+                    monthLabel.textContent = ${locale === 'ja'
+                        ? 'startOfWeek.getFullYear() + "年 " + sMonth + " " + startOfWeek.getDate() + "–" + endOfWeek.getDate() + "日"'
+                        : 'sMonth + " " + startOfWeek.getDate() + "–" + endOfWeek.getDate() + ", " + startOfWeek.getFullYear()'};
+                } else {
+                    monthLabel.textContent = ${locale === 'ja'
+                        ? 'startOfWeek.getFullYear() + "年 " + sMonth + " " + startOfWeek.getDate() + "日–" + eMonth + " " + endOfWeek.getDate() + "日"'
+                        : 'sMonth + " " + startOfWeek.getDate() + " – " + eMonth + " " + endOfWeek.getDate() + ", " + endOfWeek.getFullYear()'};
+                }
+
+                let html = '';
+                for (let d = 0; d < 7; d++) {
+                    const cls = d === 0 ? ' calendar-dow--sun' : d === 6 ? ' calendar-dow--sat' : '';
+                    html += '<div class="calendar-dow' + cls + '">' + dowLabels[d] + '</div>';
+                }
+
+                for (let d = 0; d < 7; d++) {
+                    const dt = new Date(startOfWeek);
+                    dt.setDate(dt.getDate() + d);
+                    const day = dt.getDate();
+                    const dateStr = dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(day);
+                    html += cellHtml(day, dateStr, d, false);
+                }
+
+                grid.innerHTML = html;
+            }
+
+            function render() {
+                updateViewButtons();
+                if (viewMode === 'week') {
+                    renderWeek();
+                } else {
+                    renderMonth();
+                }
+
+                grid.querySelectorAll('.calendar-cell:not(.calendar-cell--other-month)').forEach(function(cell) {
                     cell.addEventListener('click', function() {
                         vscode.postMessage({ command: 'calendarOpenDate', date: cell.dataset.date });
                     });
@@ -2086,18 +2193,36 @@ export class memoAdmin extends memoConfigure {
             }
 
             document.getElementById('cal-prev').addEventListener('click', function() {
-                viewMonth--;
-                if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+                if (viewMode === 'week') {
+                    weekOffset--;
+                } else {
+                    viewMonth--;
+                    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+                }
                 render();
             });
             document.getElementById('cal-next').addEventListener('click', function() {
-                viewMonth++;
-                if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+                if (viewMode === 'week') {
+                    weekOffset++;
+                } else {
+                    viewMonth++;
+                    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+                }
                 render();
             });
             document.getElementById('cal-today').addEventListener('click', function() {
                 viewYear = today.getFullYear();
                 viewMonth = today.getMonth();
+                weekOffset = 0;
+                render();
+            });
+            btnMonth.addEventListener('click', function() {
+                viewMode = 'month';
+                render();
+            });
+            btnWeek.addEventListener('click', function() {
+                viewMode = 'week';
+                weekOffset = 0;
                 render();
             });
 
@@ -2386,9 +2511,11 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.indexRebuildTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u524a\u9664\u3057\u3066\u6700\u521d\u304b\u3089\u4f5c\u308a\u76f4\u3057\u307e\u3059',
     'memoAdmin.calendar': '\u30ab\u30ec\u30f3\u30c0\u30fc',
     'memoAdmin.calendarCaption': '\u65e5\u5225\u30e1\u30e2\u6d3b\u52d5',
-    'memoAdmin.calPrev': '\u524d\u306e\u6708',
-    'memoAdmin.calNext': '\u6b21\u306e\u6708',
-    'memoAdmin.calToday': '\u4eca\u65e5'
+    'memoAdmin.calPrev': '\u524d\u3078',
+    'memoAdmin.calNext': '\u6b21\u3078',
+    'memoAdmin.calToday': '\u4eca\u65e5',
+    'memoAdmin.calMonth': '\u6708',
+    'memoAdmin.calWeek': '\u9031'
 };
 
 const JA_TIPS: string[] = [
