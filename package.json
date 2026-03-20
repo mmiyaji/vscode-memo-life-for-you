@@ -1,14 +1,22 @@
 {
-  "name": "vscode-memo-life-for-you",
-  "displayName": "vscode-memo-life-for-you",
-  "description": "This extension is for writing notes on VS Code. Inspired by memo (Memo Life For You)",
-  "version": "0.6.2",
-  "publisher": "satokaz",
+  "name": "memo-life-for-you-admin",
+  "displayName": "Memo Life For You Admin",
+  "description": "Daily memo workflow for VS Code with date-based folders, search tools, and a memo admin dashboard.",
+  "version": "0.6.3",
+  "publisher": "mmiyaji",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
     "Other"
+  ],
+  "keywords": [
+    "memo",
+    "notes",
+    "markdown",
+    "journal",
+    "productivity"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -18,6 +26,9 @@
   },
   "icon": "media/icon.png",
   "homepage": "https://github.com/mmiyaji/vscode-memo-life-for-you",
+  "bugs": {
+    "url": "https://github.com/mmiyaji/vscode-memo-life-for-you/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/mmiyaji/vscode-memo-life-for-you"
@@ -248,15 +259,15 @@
         },
         "memo-life-for-you.memoGrepViewMode": {
           "type": "string",
-              "enum": [
-                "quickPick",
-                "outputChannel",
-                "readOnlyDocument",
-                "editableDocument"
-              ],
-            "default": "quickPick",
-            "description": "%memoGrepViewMode.desc%"
-          },
+          "enum": [
+            "quickPick",
+            "outputChannel",
+            "readOnlyDocument",
+            "editableDocument"
+          ],
+          "default": "quickPick",
+          "description": "%memoGrepViewMode.desc%"
+        },
         "memo-life-for-you.memoGrepUseRipGrepConfigFilePath": {
           "type": "string",
           "default": "",
@@ -321,41 +332,41 @@
           "description": "%memoAdminUseGradient.desc%"
         },
         "memo-life-for-you.memoAdminOpenMode": {
-            "type": "string",
-            "enum": [
-              "currentWindow",
-              "newWindow"
-            ],
-            "default": "newWindow",
-            "markdownDescription": "%memoAdminOpenMode.desc%"
-          },
+          "type": "string",
+          "enum": [
+            "currentWindow",
+            "newWindow"
+          ],
+          "default": "currentWindow",
+          "markdownDescription": "%memoAdminOpenMode.desc%"
+        },
         "memo-life-for-you.memoAdminOpenOnStartup": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%memoAdminOpenOnStartup.desc%"
-          },
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%memoAdminOpenOnStartup.desc%"
+        },
         "memo-life-for-you.memoAdminRecentTitleMode": {
-            "type": "string",
-            "enum": [
-              "path",
-              "content",
-              "both"
-            ],
-            "default": "path",
-            "description": "%memoAdminRecentTitleMode.desc%"
-          },
+          "type": "string",
+          "enum": [
+            "path",
+            "content",
+            "both"
+          ],
+          "default": "path",
+          "description": "%memoAdminRecentTitleMode.desc%"
+        },
         "memo-life-for-you.memoPinnedFiles": {
-            "type": "array",
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "description": "%memoPinnedFiles.desc%"
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
           },
-          "memo-life-for-you.openMarkdownPreviewUseMPE": {
-            "type": "boolean",
-            "default": false,
-            "description": "%openMarkdownPreviewUseMPE.desc%"
+          "description": "%memoPinnedFiles.desc%"
+        },
+        "memo-life-for-you.openMarkdownPreviewUseMPE": {
+          "type": "boolean",
+          "default": false,
+          "description": "%openMarkdownPreviewUseMPE.desc%"
         },
         "memo-life-for-you.openChromeCustomizeURL": {
           "type": "string",
@@ -396,21 +407,21 @@
     "compile": "webpack --mode development",
     "watch": "webpack --mode development --watch",
     "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "test-compile": "tsc -p ./",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "watch-tests": "tsc -p tsconfig.test.json -w",
+    "test-compile": "tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "npm run compile-tests && node --test out/test/test"
   },
   "devDependencies": {
-    "@types/glob": "^7.1.3",
+    "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.8",
-    "@types/mustache": "^0.8.32",
+    "@types/mustache": "^4.2.6",
     "@types/node": "20.x",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.7.0",
     "@typescript-eslint/parser": "^8.7.0",
-    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.2.0",
     "del": "^8.0.0",
@@ -426,15 +437,15 @@
     "typescript": "^5.6.2",
     "vscode-nls-dev": "^4.0.4",
     "webpack": "^5.95.0",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^7.0.2"
   },
   "dependencies": {
-    "chrome-launcher": "^0.15.1",
-    "date-fns": "^2.29.3",
+    "chrome-launcher": "^1.2.1",
+    "date-fns": "^4.1.0",
     "fs-extra": "^11.2.0",
     "mustache": "^4.2.0",
     "node-emoji": "^1.11.0",
-    "tomlify-j0.4": "^2.2.1",
+    "tomlify-j0.4": "^3.0.0",
     "upath": "^2.0.1",
     "vscode-nls": "^5.2.0"
   }

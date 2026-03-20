@@ -1,4 +1,4 @@
-# vscode-memo-life-for-you README
+# Memo Life For You Admin README
 
 [Japanese README is here](https://github.com/mmiyaji/vscode-memo-life-for-you/blob/master/README_ja.md)
 
@@ -8,12 +8,13 @@ This repository is a personal fork of [satokaz/vscode-memo-life-for-you](https:/
 
 ## Install
 
-This fork is distributed as a `.vsix` file from the [GitHub Releases](https://github.com/mmiyaji/vscode-memo-life-for-you/releases) page.
+Install from the Visual Studio Code Marketplace:
 
-1. Download the latest `.vsix` from Releases.
-2. Open VS Code.
-3. Run `Extensions: Install from VSIX...` from the Command Palette.
-4. Select the downloaded `.vsix` file.
+1. Open Extensions in VS Code.
+2. Search for `Memo Life For You Admin`.
+3. Install the extension published by `mmiyaji`.
+
+If you prefer a manual install, `.vsix` packages are also available from the [GitHub Releases](https://github.com/mmiyaji/vscode-memo-life-for-you/releases) page.
 
 If you want to start directly in the memo admin workflow, open the generated `.code-workspace` file with VS Code after installation.
 

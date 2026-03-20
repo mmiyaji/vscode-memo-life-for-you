@@ -23,7 +23,7 @@ import { memoAdmin } from './memoAdmin';
 // const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Congratulations, your extension "vscode-memo-life-for-you" is now active!');
+    console.log('Congratulations, your extension "memo-life-for-you-admin" is now active!');
     // console.log(vscode.env);
     // console.log(path.normalize(path.join(vscode.env.appRoot, "node_modules", "vscode-ripgrep", "bin", "rg")));
     // console.log('vscode.Markdown =', vscode.extensions.getExtension("Microsoft.vscode-markdown").extensionPath);
@@ -111,9 +111,14 @@ async function restorePendingMemoAdmin(context: vscode.ExtensionContext, memoadm
         return;
     }
 
+    const normalizePath = (pathValue: string): string => {
+        const normalized = upath.normalizeTrim(pathValue);
+        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    };
+
     const tryOpen = async () => {
         const currentRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!currentRoot || upath.normalize(currentRoot) !== upath.normalize(pending.memodir)) {
+        if (!currentRoot || normalizePath(currentRoot) !== normalizePath(pending.memodir)) {
             return false;
         }
 
