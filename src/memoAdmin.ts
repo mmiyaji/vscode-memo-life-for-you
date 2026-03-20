@@ -15,8 +15,8 @@ type MemoStats = {
     yearCounts: Array<{ label: string; count: number }>;
     monthCounts: Array<{ label: string; count: number }>;
     folderCounts: Array<{ label: string; count: number }>;
-    pinnedFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; lineCount: number; fileSizeLabel: string; mtimeMs: number }>;
-    recentFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; lineCount: number; fileSizeLabel: string; mtimeMs: number }>;
+    pinnedFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; fileSizeLabel: string; mtimeMs: number }>;
+    recentFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; fileSizeLabel: string; mtimeMs: number }>;
 };
 type MemoRecentItem = MemoStats['recentFiles'][number];
 
@@ -469,19 +469,13 @@ export class memoAdmin extends memoConfigure {
             .sort((a, b) => b.mtimeMs - a.mtimeMs)
             .slice(0, 8);
 
-        const recentFiles = recentCandidates.map((item) => ({
-            ...item,
-            lineCount: this.countFileLines(item.filename)
-        }));
+        const recentFiles = recentCandidates;
         const pinnedFiles = (this.memoPinnedFiles ?? [])
             .map((filename) => upath.normalizeTrim(filename))
             .filter((filename, index, array) => !!filename && array.indexOf(filename) === index && fs.existsSync(filename))
             .map((filename) => {
                 const stat = fs.statSync(filename);
-                return {
-                    ...this.createRecentFileEntry(filename, stat),
-                    lineCount: this.countFileLines(filename)
-                };
+                return this.createRecentFileEntry(filename, stat);
             })
             .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
@@ -528,14 +522,6 @@ export class memoAdmin extends memoConfigure {
         return files;
     }
 
-    private countFileLines(filename: string): number {
-        const content = fs.readFileSync(filename, 'utf8');
-        if (content.length === 0) {
-            return 0;
-        }
-        return content.split(/\r\n|\r|\n/).length;
-    }
-
     private formatFileSize(size: number): string {
         if (size < 1024) {
             return `${size} B`;
@@ -546,7 +532,7 @@ export class memoAdmin extends memoConfigure {
         return `${(size / (1024 * 1024)).toFixed(1)} MB`;
     }
 
-    private createRecentFileEntry(filename: string, stat: fs.Stats): Omit<MemoRecentItem, 'lineCount'> {
+    private createRecentFileEntry(filename: string, stat: fs.Stats): MemoRecentItem {
         const pathLabel = getMemoRelativeDirectoryLabel(this.memodir, filename);
         return {
             label: pathLabel,
@@ -1884,7 +1870,7 @@ function renderRecentFiles(items: MemoRecentItem[], locale: AdminLocale, options
                 : isPinned
                     ? `<button class="pin-button" type="button" data-unpin-file="${escapeHtml(item.filename)}">${escapeHtml(options?.unpinLabel ?? (locale === 'ja' ? '\u89e3\u9664' : 'Unpin'))}</button>`
                     : `<button class="pin-button" type="button" data-pin-file="${escapeHtml(item.filename)}">${escapeHtml(options?.pinLabel ?? (locale === 'ja' ? '\u30d4\u30f3\u7559\u3081' : 'Pin'))}</button>`;
-            return `<div class="recent-item"><button class="recent-open" type="button" data-recent-file="${escapeHtml(item.filename)}"><span class="recent-title">${escapeHtml(item.title)}</span>${item.title !== item.pathLabel ? `<span class="recent-path">${escapeHtml(item.pathLabel)}</span>` : ''}<span class="recent-meta">${escapeHtml((locale === 'ja' ? '\u4f5c\u6210' : 'Created') + ': ' + item.createdAt + ' / ' + (locale === 'ja' ? '\u66f4\u65b0' : 'Updated') + ': ' + item.updatedAt + ' / ' + (locale === 'ja' ? '\u884c\u6570' : 'Lines') + ': ' + item.lineCount + ' / ' + (locale === 'ja' ? '\u30b5\u30a4\u30ba' : 'Size') + ': ' + item.fileSizeLabel)}</span></button>${pinButton}</div>`;
+            return `<div class="recent-item"><button class="recent-open" type="button" data-recent-file="${escapeHtml(item.filename)}"><span class="recent-title">${escapeHtml(item.title)}</span>${item.title !== item.pathLabel ? `<span class="recent-path">${escapeHtml(item.pathLabel)}</span>` : ''}<span class="recent-meta">${escapeHtml((locale === 'ja' ? '\u4f5c\u6210' : 'Created') + ': ' + item.createdAt + ' / ' + (locale === 'ja' ? '\u66f4\u65b0' : 'Updated') + ': ' + item.updatedAt + ' / ' + (locale === 'ja' ? '\u30b5\u30a4\u30ba' : 'Size') + ': ' + item.fileSizeLabel)}</span></button>${pinButton}</div>`;
         })
         .join('')}</div>`;
 }

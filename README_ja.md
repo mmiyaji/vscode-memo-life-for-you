@@ -1,4 +1,4 @@
-# vscode-memo-life-for-you README
+# Memo Life For You Admin README
 
 ## Memo Admin
 

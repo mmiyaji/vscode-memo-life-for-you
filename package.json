@@ -337,7 +337,7 @@
               "currentWindow",
               "newWindow"
             ],
-            "default": "newWindow",
+            "default": "currentWindow",
             "markdownDescription": "%memoAdminOpenMode.desc%"
           },
         "memo-life-for-you.memoAdminOpenOnStartup": {

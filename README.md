@@ -1,4 +1,4 @@
-# vscode-memo-life-for-you README
+# Memo Life For You Admin README
 
 [Japanese README is here](https://github.com/mmiyaji/vscode-memo-life-for-you/blob/master/README_ja.md)
 

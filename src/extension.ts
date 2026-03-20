@@ -111,9 +111,14 @@ async function restorePendingMemoAdmin(context: vscode.ExtensionContext, memoadm
         return;
     }
 
+    const normalizePath = (pathValue: string): string => {
+        const normalized = upath.normalizeTrim(pathValue);
+        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    };
+
     const tryOpen = async () => {
         const currentRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!currentRoot || upath.normalize(currentRoot) !== upath.normalize(pending.memodir)) {
+        if (!currentRoot || normalizePath(currentRoot) !== normalizePath(pending.memodir)) {
             return false;
         }
 
