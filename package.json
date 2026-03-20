@@ -259,15 +259,15 @@
         },
         "memo-life-for-you.memoGrepViewMode": {
           "type": "string",
-              "enum": [
-                "quickPick",
-                "outputChannel",
-                "readOnlyDocument",
-                "editableDocument"
-              ],
-            "default": "quickPick",
-            "description": "%memoGrepViewMode.desc%"
-          },
+          "enum": [
+            "quickPick",
+            "outputChannel",
+            "readOnlyDocument",
+            "editableDocument"
+          ],
+          "default": "quickPick",
+          "description": "%memoGrepViewMode.desc%"
+        },
         "memo-life-for-you.memoGrepUseRipGrepConfigFilePath": {
           "type": "string",
           "default": "",
@@ -332,41 +332,41 @@
           "description": "%memoAdminUseGradient.desc%"
         },
         "memo-life-for-you.memoAdminOpenMode": {
-            "type": "string",
-            "enum": [
-              "currentWindow",
-              "newWindow"
-            ],
-            "default": "currentWindow",
-            "markdownDescription": "%memoAdminOpenMode.desc%"
-          },
+          "type": "string",
+          "enum": [
+            "currentWindow",
+            "newWindow"
+          ],
+          "default": "currentWindow",
+          "markdownDescription": "%memoAdminOpenMode.desc%"
+        },
         "memo-life-for-you.memoAdminOpenOnStartup": {
-            "type": "boolean",
-            "default": false,
-            "markdownDescription": "%memoAdminOpenOnStartup.desc%"
-          },
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%memoAdminOpenOnStartup.desc%"
+        },
         "memo-life-for-you.memoAdminRecentTitleMode": {
-            "type": "string",
-            "enum": [
-              "path",
-              "content",
-              "both"
-            ],
-            "default": "path",
-            "description": "%memoAdminRecentTitleMode.desc%"
-          },
+          "type": "string",
+          "enum": [
+            "path",
+            "content",
+            "both"
+          ],
+          "default": "path",
+          "description": "%memoAdminRecentTitleMode.desc%"
+        },
         "memo-life-for-you.memoPinnedFiles": {
-            "type": "array",
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "description": "%memoPinnedFiles.desc%"
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
           },
-          "memo-life-for-you.openMarkdownPreviewUseMPE": {
-            "type": "boolean",
-            "default": false,
-            "description": "%openMarkdownPreviewUseMPE.desc%"
+          "description": "%memoPinnedFiles.desc%"
+        },
+        "memo-life-for-you.openMarkdownPreviewUseMPE": {
+          "type": "boolean",
+          "default": false,
+          "description": "%openMarkdownPreviewUseMPE.desc%"
         },
         "memo-life-for-you.openChromeCustomizeURL": {
           "type": "string",
@@ -414,14 +414,14 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/glob": "^7.1.3",
+    "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.8",
-    "@types/mustache": "^0.8.32",
+    "@types/mustache": "^4.2.6",
     "@types/node": "20.x",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.7.0",
     "@typescript-eslint/parser": "^8.7.0",
-    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.2.0",
     "del": "^8.0.0",
@@ -437,15 +437,15 @@
     "typescript": "^5.6.2",
     "vscode-nls-dev": "^4.0.4",
     "webpack": "^5.95.0",
-    "webpack-cli": "^5.1.4"
+    "webpack-cli": "^7.0.2"
   },
   "dependencies": {
-    "chrome-launcher": "^0.15.1",
-    "date-fns": "^2.29.3",
+    "chrome-launcher": "^1.2.1",
+    "date-fns": "^4.1.0",
     "fs-extra": "^11.2.0",
     "mustache": "^4.2.0",
     "node-emoji": "^1.11.0",
-    "tomlify-j0.4": "^2.2.1",
+    "tomlify-j0.4": "^3.0.0",
     "upath": "^2.0.1",
     "vscode-nls": "^5.2.0"
   }
