@@ -48,7 +48,7 @@ export class memoAdmin extends memoConfigure {
     }
 
     public async initializeIndex(context: vscode.ExtensionContext): Promise<void> {
-        this.readConfig();
+        this.safeReadConfig();
         if (!this.memodir || !fs.existsSync(this.memodir)) {
             return;
         }
@@ -92,11 +92,9 @@ export class memoAdmin extends memoConfigure {
             return;
         }
 
-        this.readConfig();
+        this.safeReadConfig();
 
         memoAdmin.openingPanelPromise = (async () => {
-            await this.revealMemoRootInExplorer();
-
             if (memoAdmin.currentPanel) {
                 return;
             }
@@ -391,6 +389,9 @@ export class memoAdmin extends memoConfigure {
             });
 
             this.renderPanel(panel, context);
+
+            // Reveal memo root in Explorer after panel is shown (non-blocking)
+            this.revealMemoRootInExplorer().catch(() => { /* ignore */ });
         })();
 
         try {
@@ -401,7 +402,7 @@ export class memoAdmin extends memoConfigure {
     }
 
     public async ShowInNewWindow(context: vscode.ExtensionContext): Promise<void> {
-        this.readConfig();
+        this.safeReadConfig();
 
         if (!this.memodir || !fs.existsSync(this.memodir)) {
             vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
@@ -654,16 +655,7 @@ export class memoAdmin extends memoConfigure {
 
     private collectStats(): MemoStats {
         if (!this.memodir || !fs.existsSync(this.memodir)) {
-            return {
-                totalFiles: 0,
-                yearCounts: [],
-                monthCounts: [],
-                folderCounts: [],
-                pinnedFiles: [],
-                recentFiles: [],
-                calendarData: {},
-                tagCounts: [],
-            };
+            return this.emptyStats();
         }
 
         const cacheKey = JSON.stringify({
@@ -2740,12 +2732,47 @@ export class memoAdmin extends memoConfigure {
             });
         }
 
+        // If stats cache is available, render immediately
+        if (memoAdmin.statsCache) {
+            try {
+                panel.webview.html = this.getHtml(context, this.collectStats());
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Unknown error';
+                panel.webview.html = this.getErrorHtml(message);
+            }
+            return;
+        }
+
+        // No cache: show skeleton first, then collect stats async and re-render
         try {
-            panel.webview.html = this.getHtml(context, this.collectStats());
+            panel.webview.html = this.getHtml(context, this.emptyStats());
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown error';
             panel.webview.html = this.getErrorHtml(message);
+            return;
         }
+
+        // Defer heavy stats collection to avoid blocking panel display
+        setImmediate(() => {
+            try {
+                panel.webview.html = this.getHtml(context, this.collectStats());
+            } catch {
+                // already showing skeleton, ignore
+            }
+        });
+    }
+
+    private emptyStats(): MemoStats {
+        return {
+            totalFiles: 0,
+            yearCounts: [],
+            monthCounts: [],
+            folderCounts: [],
+            pinnedFiles: [],
+            recentFiles: [],
+            calendarData: {},
+            tagCounts: [],
+        };
     }
 
     private getErrorHtml(message: string): string {

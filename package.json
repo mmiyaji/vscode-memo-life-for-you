@@ -177,7 +177,7 @@
       },
       {
         "command": "extension.memoAdmin",
-        "key": "ctrl+alt+m",
+        "key": "ctrl+alt+shift+m",
         "when": "editorTextFocus || !editorFocus"
       }
     ],
