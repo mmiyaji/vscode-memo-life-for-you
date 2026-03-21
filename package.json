@@ -117,6 +117,46 @@
       {
         "command": "extension.memoAutoTag",
         "title": "%extension.memoAutoTag.title%"
+      },
+      {
+        "command": "extension.memoSummarize",
+        "title": "%extension.memoSummarize.title%"
+      },
+      {
+        "command": "extension.memoRelated",
+        "title": "%extension.memoRelated.title%"
+      },
+      {
+        "command": "extension.memoExtractTodos",
+        "title": "%extension.memoExtractTodos.title%"
+      },
+      {
+        "command": "extension.memoReport",
+        "title": "%extension.memoReport.title%"
+      },
+      {
+        "command": "extension.memoProofread",
+        "title": "%extension.memoProofread.title%"
+      },
+      {
+        "command": "extension.memoQA",
+        "title": "%extension.memoQA.title%"
+      },
+      {
+        "command": "extension.memoSuggestTemplate",
+        "title": "%extension.memoSuggestTemplate.title%"
+      },
+      {
+        "command": "extension.memoGenerateTitle",
+        "title": "%extension.memoGenerateTitle.title%"
+      },
+      {
+        "command": "extension.memoTranslate",
+        "title": "%extension.memoTranslate.title%"
+      },
+      {
+        "command": "extension.memoLinkSuggest",
+        "title": "%extension.memoLinkSuggest.title%"
       }
     ],
     "keybindings": [
@@ -141,6 +181,12 @@
         "when": "editorTextFocus || !editorFocus"
       }
     ],
+    "submenus": [
+      {
+        "id": "memo.submenu",
+        "label": "Memo"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {
@@ -151,7 +197,18 @@
         {
           "command": "extension.memoAdmin",
           "title": "%extension.memoAdmin.title%"
-        }
+        },
+        { "command": "extension.memoAutoTag", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoSummarize", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoRelated", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoExtractTodos", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoReport", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoProofread", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoQA", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoSuggestTemplate", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoGenerateTitle", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoTranslate", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoLinkSuggest", "when": "config.memo-life-for-you.aiEnabled" }
       ],
       "editor/title": [
         {
@@ -163,26 +220,28 @@
       ],
       "editor/context": [
         {
-          "command": "extension.memoNew",
-          "title": "Memo: New",
-          "group": "memo@1"
-        },
-        {
-          "command": "extension.memoEdit",
-          "group": "memo@2"
-        },
-        {
-          "command": "extension.memoQuick",
-          "group": "memo@3"
-        },
-        {
-          "command": "extension.memoGrep",
-          "group": "memo@4"
-        },
-        {
-          "command": "extension.memoServe",
-          "group": "memo@5"
+          "submenu": "memo.submenu",
+          "group": "memo@1",
+          "when": "editorLangId == markdown"
         }
+      ],
+      "memo.submenu": [
+        { "command": "extension.memoNew", "group": "1_basic@1" },
+        { "command": "extension.memoEdit", "group": "1_basic@2" },
+        { "command": "extension.memoQuick", "group": "1_basic@3" },
+        { "command": "extension.memoGrep", "group": "1_basic@4" },
+        { "command": "extension.memoAdmin", "group": "1_basic@5" },
+        { "command": "extension.memoAutoTag", "group": "2_ai@1", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoSummarize", "group": "2_ai@2", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoGenerateTitle", "group": "2_ai@3", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoProofread", "group": "2_ai@4", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoTranslate", "group": "2_ai@5", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoQA", "group": "2_ai@6", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoRelated", "group": "3_ai_multi@1", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoLinkSuggest", "group": "3_ai_multi@2", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoExtractTodos", "group": "3_ai_multi@3", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoReport", "group": "3_ai_multi@4", "when": "config.memo-life-for-you.aiEnabled" },
+        { "command": "extension.memoSuggestTemplate", "group": "3_ai_multi@5", "when": "config.memo-life-for-you.aiEnabled" }
       ]
     },
     "configuration": [
@@ -448,6 +507,11 @@
       {
         "title": "%config.group.ai%",
         "properties": {
+          "memo-life-for-you.aiEnabled": {
+            "type": "boolean",
+            "default": false,
+            "description": "%aiEnabled.desc%"
+          },
           "memo-life-for-you.aiProvider": {
             "type": "string",
             "default": "ollama",
@@ -471,9 +535,29 @@
           },
           "memo-life-for-you.aiTagLanguage": {
             "type": "string",
-            "default": "ja",
-            "enum": ["ja", "en"],
+            "default": "auto",
+            "enum": ["auto", "ja", "en"],
             "description": "%aiTagLanguage.desc%"
+          },
+          "memo-life-for-you.aiProxy": {
+            "type": "string",
+            "default": "",
+            "description": "%aiProxy.desc%"
+          },
+          "memo-life-for-you.aiProxyBypass": {
+            "type": "string",
+            "default": "",
+            "description": "%aiProxyBypass.desc%"
+          },
+          "memo-life-for-you.aiTlsRejectUnauthorized": {
+            "type": "boolean",
+            "default": true,
+            "description": "%aiTlsRejectUnauthorized.desc%"
+          },
+          "memo-life-for-you.aiTlsCaCert": {
+            "type": "string",
+            "default": "",
+            "description": "%aiTlsCaCert.desc%"
           }
         }
       }

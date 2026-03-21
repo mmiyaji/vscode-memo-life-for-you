@@ -17,7 +17,7 @@ import { memoOpenChrome } from './memoOpenChrome';
 import { memoOpenTypora } from './memoOpenTypora';
 import { memoAdmin } from './memoAdmin';
 import { MemoSnippetProvider } from './memoSnippets';
-import { memoAutoTag } from './memoAutoTag';
+import { memoAutoTag, memoSummarize, memoRelated, memoExtractTodos, memoReport, memoProofread, memoQA, memoSuggestTemplate, memoGenerateTitle, memoTranslate, memoLinkSuggest } from './memoAi';
 
 // import {MDDocumentContentProvider, isMarkdownFile, getMarkdownUri, showPreview} from './MDDocumentContentProvider'
 
@@ -50,6 +50,29 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenChrome", () => new memoOpenChrome().OpenChrome()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenTypora", () => new memoOpenTypora().OpenTypora()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoAutoTag", () => memoAutoTag(memoAdmin.getAllTags())));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoSummarize", () => memoSummarize()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoRelated", () => {
+        const cfg = new memoConfigure();
+        memoRelated(cfg.memodir, cfg.memoListDisplayExtname);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoExtractTodos", () => memoExtractTodos()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoReport", () => {
+        const cfg = new memoConfigure();
+        memoReport(cfg.memodir, cfg.memoListDisplayExtname);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoProofread", () => memoProofread()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoQA", () => memoQA()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoSuggestTemplate", () => {
+        const cfg = new memoConfigure();
+        const templatesDir = cfg.memoTemplatesDir || upath.join(cfg.memoconfdir, '.templates');
+        memoSuggestTemplate(templatesDir);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoGenerateTitle", () => memoGenerateTitle()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoTranslate", () => memoTranslate()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoLinkSuggest", () => {
+        const cfg = new memoConfigure();
+        memoLinkSuggest(cfg.memodir, cfg.memoListDisplayExtname);
+    }));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoAdmin", async () => {
         memoadmin.updateConfiguration();
         if (memoadmin.memoAdminOpenMode === 'newWindow') {
