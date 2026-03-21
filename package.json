@@ -45,6 +45,9 @@
           "comments": "off",
           "strings": "off"
         }
+      },
+      "markdown.copyFiles.destination": {
+        "*": "assets/${isoTime/^(\\d+)-(\\d+)-(\\d+)T(\\d+):(\\d+):(\\d+).+/$1$2$3-$4$5$6/}.${fileExtName}"
       }
     },
     "commands": [

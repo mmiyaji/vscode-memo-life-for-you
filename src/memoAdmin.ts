@@ -218,6 +218,8 @@ export class memoAdmin extends memoConfigure {
                         const workspacePath = selectedUri.fsPath.endsWith('.code-workspace')
                             ? selectedUri.fsPath
                             : `${selectedUri.fsPath}.code-workspace`;
+                        this.scaffoldMemoFolders(this.memodir);
+
                         const workspaceContent = JSON.stringify({
                             folders: [
                                 {
@@ -228,7 +230,19 @@ export class memoAdmin extends memoConfigure {
                             settings: {
                                 'memo-life-for-you.memoAdminOpenOnStartup': true,
                                 'memo-life-for-you.memoAdminOpenMode': 'currentWindow',
+                                'memo-life-for-you.memoTemplatesDir': upath.join(this.memodir, '.templates'),
+                                'memo-life-for-you.memoSnippetsDir': upath.join(this.memodir, '.snippets'),
+                                'markdown.copyFiles.destination': {
+                                    '*': 'assets/${isoTime/^(\\d+)-(\\d+)-(\\d+)T(\\d+):(\\d+):(\\d+).+/$1$2$3-$4$5$6/}.${fileExtName}'
+                                },
                                 'workbench.colorCustomizations': this.getWorkspaceColorCustomizations()
+                            },
+                            extensions: {
+                                recommendations: [
+                                    'mmiyaji.memo-life-for-you-admin',
+                                    'yzhang.markdown-all-in-one',
+                                    'mmiyaji.vscode-undotree'
+                                ]
                             }
                         }, null, 2);
 
@@ -474,6 +488,94 @@ export class memoAdmin extends memoConfigure {
             .filter((filename, index, array) => !!filename && array.indexOf(filename) === index);
         await vscode.workspace.getConfiguration('memo-life-for-you').update('memoPinnedFiles', next, this.getSettingsTarget());
         this.updateConfiguration();
+    }
+
+    private scaffoldMemoFolders(memodir: string): void {
+        const templatesDir = upath.join(memodir, '.templates');
+        const snippetsDir = upath.join(memodir, '.snippets');
+        const assetsDir = upath.join(memodir, 'assets');
+
+        for (const dir of [templatesDir, snippetsDir, assetsDir]) {
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+        }
+
+        const sampleTemplate = upath.join(templatesDir, 'default.md');
+        if (!fs.existsSync(sampleTemplate)) {
+            fs.writeFileSync(sampleTemplate, [
+                '# {{.Date}} {{.Title}}',
+                '',
+                '## Summary',
+                '',
+                '',
+                '',
+                '## Notes',
+                '',
+                '',
+                ''
+            ].join('\n'), 'utf8');
+        }
+
+        const meetingTemplate = upath.join(templatesDir, 'meeting.md');
+        if (!fs.existsSync(meetingTemplate)) {
+            fs.writeFileSync(meetingTemplate, [
+                '# {{.Date}} {{.Title}}',
+                '',
+                '## Attendees',
+                '',
+                '- ',
+                '',
+                '## Agenda',
+                '',
+                '1. ',
+                '',
+                '## Action Items',
+                '',
+                '- [ ] ',
+                '',
+                ''
+            ].join('\n'), 'utf8');
+        }
+
+        const sampleSnippet = upath.join(snippetsDir, 'memo.json');
+        if (!fs.existsSync(sampleSnippet)) {
+            const snippetContent = {
+                'Task list': {
+                    prefix: 'task',
+                    body: [
+                        '## Tasks',
+                        '',
+                        '- [ ] ${1:task}',
+                        '- [ ] ${2:task}',
+                        '- [ ] ${3:task}',
+                        ''
+                    ],
+                    description: 'Insert a task checklist'
+                },
+                'Code block': {
+                    prefix: 'codeblock',
+                    body: [
+                        '```${1:language}',
+                        '${2:code}',
+                        '```',
+                        ''
+                    ],
+                    description: 'Insert a fenced code block'
+                },
+                'Table': {
+                    prefix: 'table',
+                    body: [
+                        '| ${1:Header1} | ${2:Header2} | ${3:Header3} |',
+                        '|---|---|---|',
+                        '| ${4:cell} | ${5:cell} | ${6:cell} |',
+                        ''
+                    ],
+                    description: 'Insert a markdown table'
+                }
+            };
+            fs.writeFileSync(sampleSnippet, JSON.stringify(snippetContent, null, 2) + '\n', 'utf8');
+        }
     }
 
     private getWorkspaceColorCustomizations(): Record<string, string> {
