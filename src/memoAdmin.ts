@@ -43,6 +43,10 @@ export class memoAdmin extends memoConfigure {
         memoAdmin.snippetProvider = provider;
     }
 
+    public static getAllTags(): string[] {
+        return memoAdmin.memoIndex?.getAllTags() ?? [];
+    }
+
     public async initializeIndex(context: vscode.ExtensionContext): Promise<void> {
         this.readConfig();
         if (!this.memodir || !fs.existsSync(this.memodir)) {

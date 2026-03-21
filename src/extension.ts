@@ -17,6 +17,7 @@ import { memoOpenChrome } from './memoOpenChrome';
 import { memoOpenTypora } from './memoOpenTypora';
 import { memoAdmin } from './memoAdmin';
 import { MemoSnippetProvider } from './memoSnippets';
+import { memoAutoTag } from './memoAutoTag';
 
 // import {MDDocumentContentProvider, isMarkdownFile, getMarkdownUri, showPreview} from './MDDocumentContentProvider'
 
@@ -48,6 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenFolder", () => new memoOpenFolder().OpenDir()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenChrome", () => new memoOpenChrome().OpenChrome()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenTypora", () => new memoOpenTypora().OpenTypora()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoAutoTag", () => memoAutoTag(memoAdmin.getAllTags())));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoAdmin", async () => {
         memoadmin.updateConfiguration();
         if (memoadmin.memoAdminOpenMode === 'newWindow') {

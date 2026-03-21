@@ -54,5 +54,12 @@
     "openMarkdownPreviewUseMPE.desc": "`memo-life-for-you.openMarkdownPreview` が `true` の場合に `Markdown Preview Enhanced` を使ってプレビューを開きます (既定: false)。",
     "openChromeCustomizeURL.desc": "`Memo: Open Chrome with <html contenteditable>` で開く URL をカスタマイズします。",
     "openTyporaExecPath.desc": "Typora 実行ファイルのパスです。",
-    "memolistDisplayExtname.desc": "`Memo: List/Edit` に表示するファイル拡張子です。"
+    "memolistDisplayExtname.desc": "`Memo: List/Edit` に表示するファイル拡張子です。",
+    "config.group.ai": "AI / 自動タグ",
+    "extension.memoAutoTag.title": "Memo: 自動タグ生成",
+    "aiProvider.desc": "自動タグ生成に使用する LLM プロバイダーです。`ollama` はローカル Ollama、`openai` は OpenAI 互換 API（Claude、OpenAI など）です。",
+    "aiEndpoint.desc": "API エンドポイント URL です。Ollama 既定: `http://localhost:11434`。OpenAI: `https://api.openai.com/v1`。Claude: `https://api.anthropic.com`。",
+    "aiModel.desc": "タグ生成に使用するモデル名です。Ollama 例: `gemma3:4b`。OpenAI 例: `gpt-4o-mini`。",
+    "aiApiKey.desc": "クラウドプロバイダー用の API キーです（Ollama では不要）。",
+    "aiTagLanguage.desc": "生成するタグの言語です。`ja` は日本語、`en` は英語。"
 }

@@ -113,6 +113,10 @@
       {
         "command": "extension.memoAdmin",
         "title": "%extension.memoAdmin.title%"
+      },
+      {
+        "command": "extension.memoAutoTag",
+        "title": "%extension.memoAutoTag.title%"
       }
     ],
     "keybindings": [
@@ -438,6 +442,38 @@
             "type": "string",
             "default": "",
             "description": "%openTyporaExecPath.desc%"
+          }
+        }
+      },
+      {
+        "title": "%config.group.ai%",
+        "properties": {
+          "memo-life-for-you.aiProvider": {
+            "type": "string",
+            "default": "ollama",
+            "enum": ["ollama", "openai"],
+            "description": "%aiProvider.desc%"
+          },
+          "memo-life-for-you.aiEndpoint": {
+            "type": "string",
+            "default": "http://localhost:11434",
+            "description": "%aiEndpoint.desc%"
+          },
+          "memo-life-for-you.aiModel": {
+            "type": "string",
+            "default": "qwen3:1.7b",
+            "description": "%aiModel.desc%"
+          },
+          "memo-life-for-you.aiApiKey": {
+            "type": "string",
+            "default": "",
+            "description": "%aiApiKey.desc%"
+          },
+          "memo-life-for-you.aiTagLanguage": {
+            "type": "string",
+            "default": "ja",
+            "enum": ["ja", "en"],
+            "description": "%aiTagLanguage.desc%"
           }
         }
       }
