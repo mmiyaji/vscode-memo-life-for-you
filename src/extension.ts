@@ -1,6 +1,7 @@
 'use strict';
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as upath from 'upath';
 import * as nls from 'vscode-nls';
 import { memoConfigure } from './memoConfigure';
@@ -64,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoQA", () => memoQA()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoSuggestTemplate", () => {
         const cfg = new memoConfigure();
-        const templatesDir = cfg.memoTemplatesDir || upath.join(cfg.memoconfdir, '.templates');
+        const templatesDir = cfg.memoTemplatesDir || upath.join(cfg.memodir, '.templates');
         memoSuggestTemplate(templatesDir);
     }));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoGenerateTitle", () => memoGenerateTitle()));
@@ -116,6 +117,27 @@ export function activate(context: vscode.ExtensionContext) {
 
     void restorePendingMemoAdmin(context, memoadmin);
     void openMemoAdminOnStartup(context, memoadmin);
+
+    // First-launch setup notification
+    {
+        const cfg = new memoConfigure();
+        const hasMemoDir = cfg.memodir && cfg.memodir.trim() !== '' && fs.existsSync(cfg.memodir);
+        if (!hasMemoDir) {
+            const adminLabel = nls.loadMessageBundle()('memoSetup.openAdmin', 'Open Admin');
+            const configLabel = nls.loadMessageBundle()('memoSetup.openConfig', 'Open config');
+            vscode.window.showInformationMessage(
+                nls.loadMessageBundle()('memoSetup.message', 'Memo: Set a memo directory to get started.'),
+                adminLabel,
+                configLabel
+            ).then(choice => {
+                if (choice === adminLabel) {
+                    vscode.commands.executeCommand('extension.memoAdmin');
+                } else if (choice === configLabel) {
+                    vscode.commands.executeCommand('extension.memoConfig');
+                }
+            });
+        }
+    }
 
     // vscode.commands.registerCommand('favorites.refresh', () => treeViewProvider.refresh());
 

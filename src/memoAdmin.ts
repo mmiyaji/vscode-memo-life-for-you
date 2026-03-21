@@ -880,7 +880,7 @@ export class memoAdmin extends memoConfigure {
         const upstreamUrl = 'https://github.com/satokaz/vscode-memo-life-for-you';
         const locale = this.getDisplayLanguage();
         const indexStatus = memoAdmin.memoIndex?.getStatus();
-        const hasValidMemoDir = !!safeMemoDir && fs.existsSync(safeMemoDir);
+        const hasValidMemoDir = !!safeMemoDir && safeMemoDir !== '.' && fs.existsSync(safeMemoDir);
         const effectiveAppearance = this.getEffectiveAppearance();
         const appearanceLabel = this.getAppearanceLabel(this.memoAdminAppearance, locale);
         const colorThemeLabel = this.getColorThemeLabel(this.memoAdminColorTheme, locale);
@@ -1544,6 +1544,73 @@ export class memoAdmin extends memoConfigure {
         .snippet-status .warn { color: #d29922; }
         .snippet-status .err { color: #f85149; }
 
+        /* Welcome / Setup guide */
+        .welcome-card {
+            text-align: center;
+            padding: 32px 24px;
+        }
+        .welcome-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        .welcome-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent-strong);
+            margin: 0 0 8px;
+        }
+        .welcome-desc {
+            color: var(--muted);
+            font-size: 14px;
+            margin: 0 0 24px;
+            max-width: 480px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .welcome-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 420px;
+            margin: 0 auto 24px;
+            text-align: left;
+        }
+        .welcome-step {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        .step-number {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: var(--accent-strong);
+            color: var(--surface-bg);
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+        .step-desc {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .welcome-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
         .footer {
             display: flex;
             flex-wrap: wrap;
@@ -2152,6 +2219,42 @@ export class memoAdmin extends memoConfigure {
             </div>
         </section>
 
+        ${!hasValidMemoDir ? `
+        <section class="stack">
+            <article class="card welcome-card">
+                <div class="welcome-icon">&#128221;</div>
+                <h2 class="welcome-title">${t('memoAdmin.welcomeTitle', 'Welcome to Memo Life For You!')}</h2>
+                <p class="welcome-desc">${t('memoAdmin.welcomeDesc', 'Set up a memo directory to start organizing your notes. You can configure it in the settings above.')}</p>
+                <div class="welcome-steps">
+                    <div class="welcome-step">
+                        <span class="step-number">1</span>
+                        <div class="step-content">
+                            <div class="step-title">${t('memoAdmin.step1Title', 'Set memo directory')}</div>
+                            <div class="step-desc">${t('memoAdmin.step1Desc', 'Open the settings panel above and specify the path where your memos will be stored.')}</div>
+                        </div>
+                    </div>
+                    <div class="welcome-step">
+                        <span class="step-number">2</span>
+                        <div class="step-content">
+                            <div class="step-title">${t('memoAdmin.step2Title', 'Create your first memo')}</div>
+                            <div class="step-desc">${t('memoAdmin.step2Desc', 'Use the "New memo" button or run "Memo: New" from the command palette.')}</div>
+                        </div>
+                    </div>
+                    <div class="welcome-step">
+                        <span class="step-number">3</span>
+                        <div class="step-content">
+                            <div class="step-title">${t('memoAdmin.step3Title', 'Customize templates & snippets')}</div>
+                            <div class="step-desc">${t('memoAdmin.step3Desc', 'Place .md files in .templates/ and snippet JSON in .snippets/ inside your memo directory.')}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="welcome-actions">
+                    <button class="primary" data-command="openSettings">${t('memoAdmin.openAdvancedSettings', 'Advanced settings')}</button>
+                    <button class="secondary" data-command="createWorkspace">${t('memoAdmin.createWorkspace', 'Create workspace')}</button>
+                </div>
+            </article>
+        </section>
+        ` : `
         <section class="stack">
             <details class="card" open>
                 <summary class="card-header card-toggle">
@@ -2350,6 +2453,7 @@ export class memoAdmin extends memoConfigure {
                 </div>
             </details>
         </section>
+        `}
         <footer class="footer">
             <div class="footer-links">
                 ${repositoryUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(repositoryUrl)}"><svg class="link-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path></svg><span>${t('memoAdmin.repoLink', 'GitHub/mmiyaji')}</span></button>` : ''}
@@ -2365,6 +2469,7 @@ export class memoAdmin extends memoConfigure {
 
         // Calendar
         (function() {
+            if (!document.getElementById('cal-grid')) { return; }
             const calData = ${JSON.stringify(stats.calendarData)};
             const dowLabels = ${locale === 'ja' ? "['日','月','火','水','木','金','土']" : "['Sun','Mon','Tue','Wed','Thu','Fri','Sat']"};
             const monthNames = ${locale === 'ja'
@@ -2624,7 +2729,7 @@ export class memoAdmin extends memoConfigure {
 
     private renderPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
         this.updateConfiguration();
-        this.readConfig();
+        this.safeReadConfig();
         panel.title = this.translate(this.getDisplayLanguage(), 'extension.memoAdmin.title', 'Memo Admin');
 
         if (!memoAdmin.memoIndex && this.memodir && fs.existsSync(this.memodir)) {
@@ -2870,6 +2975,14 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.templateFile': '\u30d5\u30a1\u30a4\u30eb',
     'memoAdmin.templateSize': '\u30b5\u30a4\u30ba',
     'memoAdmin.templatesEmpty': '\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u306b .md \u30d5\u30a1\u30a4\u30eb\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    'memoAdmin.welcomeTitle': 'Memo Life For You \u3078\u3088\u3046\u3053\u305d\uff01',
+    'memoAdmin.welcomeDesc': '\u30e1\u30e2\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u8a2d\u5b9a\u3057\u3066\u3001\u30ce\u30fc\u30c8\u306e\u6574\u7406\u3092\u59cb\u3081\u307e\u3057\u3087\u3046\u3002\u4e0a\u306e\u8a2d\u5b9a\u30d1\u30cd\u30eb\u304b\u3089\u8a2d\u5b9a\u3067\u304d\u307e\u3059\u3002',
+    'memoAdmin.step1Title': '\u30e1\u30e2\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u8a2d\u5b9a',
+    'memoAdmin.step1Desc': '\u4e0a\u306e\u8a2d\u5b9a\u30d1\u30cd\u30eb\u3092\u958b\u3044\u3066\u3001\u30e1\u30e2\u306e\u4fdd\u5b58\u5148\u30d1\u30b9\u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    'memoAdmin.step2Title': '\u6700\u521d\u306e\u30e1\u30e2\u3092\u4f5c\u6210',
+    'memoAdmin.step2Desc': '\u300c\u65b0\u898f\u30e1\u30e2\u300d\u30dc\u30bf\u30f3\u307e\u305f\u306f\u30b3\u30de\u30f3\u30c9\u30d1\u30ec\u30c3\u30c8\u304b\u3089\u300cMemo: New\u300d\u3092\u5b9f\u884c\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    'memoAdmin.step3Title': '\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u3068\u30b9\u30cb\u30da\u30c3\u30c8\u3092\u30ab\u30b9\u30bf\u30de\u30a4\u30ba',
+    'memoAdmin.step3Desc': '\u30e1\u30e2\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u5185\u306e .templates/ \u306b .md \u30d5\u30a1\u30a4\u30eb\u3001.snippets/ \u306b\u30b9\u30cb\u30da\u30c3\u30c8JSON\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
 };
 
 const JA_TIPS: string[] = [

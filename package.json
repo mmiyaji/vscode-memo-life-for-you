@@ -198,17 +198,50 @@
           "command": "extension.memoAdmin",
           "title": "%extension.memoAdmin.title%"
         },
-        { "command": "extension.memoAutoTag", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoSummarize", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoRelated", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoExtractTodos", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoReport", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoProofread", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoQA", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoSuggestTemplate", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoGenerateTitle", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoTranslate", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoLinkSuggest", "when": "config.memo-life-for-you.aiEnabled" }
+        {
+          "command": "extension.memoAutoTag",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoSummarize",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoRelated",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoExtractTodos",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoReport",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoProofread",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoQA",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoSuggestTemplate",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoGenerateTitle",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoTranslate",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoLinkSuggest",
+          "when": "config.memo-life-for-you.aiEnabled"
+        }
       ],
       "editor/title": [
         {
@@ -226,28 +259,97 @@
         }
       ],
       "memo.submenu": [
-        { "command": "extension.memoNew", "group": "1_basic@1" },
-        { "command": "extension.memoEdit", "group": "1_basic@2" },
-        { "command": "extension.memoQuick", "group": "1_basic@3" },
-        { "command": "extension.memoGrep", "group": "1_basic@4" },
-        { "command": "extension.memoAdmin", "group": "1_basic@5" },
-        { "command": "extension.memoAutoTag", "group": "2_ai@1", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoSummarize", "group": "2_ai@2", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoGenerateTitle", "group": "2_ai@3", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoProofread", "group": "2_ai@4", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoTranslate", "group": "2_ai@5", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoQA", "group": "2_ai@6", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoRelated", "group": "3_ai_multi@1", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoLinkSuggest", "group": "3_ai_multi@2", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoExtractTodos", "group": "3_ai_multi@3", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoReport", "group": "3_ai_multi@4", "when": "config.memo-life-for-you.aiEnabled" },
-        { "command": "extension.memoSuggestTemplate", "group": "3_ai_multi@5", "when": "config.memo-life-for-you.aiEnabled" }
+        {
+          "command": "extension.memoNew",
+          "group": "1_basic@1"
+        },
+        {
+          "command": "extension.memoEdit",
+          "group": "1_basic@2"
+        },
+        {
+          "command": "extension.memoQuick",
+          "group": "1_basic@3"
+        },
+        {
+          "command": "extension.memoGrep",
+          "group": "1_basic@4"
+        },
+        {
+          "command": "extension.memoAdmin",
+          "group": "1_basic@5"
+        },
+        {
+          "command": "extension.memoAutoTag",
+          "group": "2_ai@1",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoSummarize",
+          "group": "2_ai@2",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoGenerateTitle",
+          "group": "2_ai@3",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoProofread",
+          "group": "2_ai@4",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoTranslate",
+          "group": "2_ai@5",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoQA",
+          "group": "2_ai@6",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoRelated",
+          "group": "3_ai_multi@1",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoLinkSuggest",
+          "group": "3_ai_multi@2",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoExtractTodos",
+          "group": "3_ai_multi@3",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoReport",
+          "group": "3_ai_multi@4",
+          "when": "config.memo-life-for-you.aiEnabled"
+        },
+        {
+          "command": "extension.memoSuggestTemplate",
+          "group": "3_ai_multi@5",
+          "when": "config.memo-life-for-you.aiEnabled"
+        }
       ]
     },
     "configuration": [
       {
         "title": "%config.group.general%",
         "properties": {
+          "memo-life-for-you.memodir": {
+            "type": "string",
+            "default": "",
+            "description": "%memodir.desc%"
+          },
+          "memo-life-for-you.memotemplate": {
+            "type": "string",
+            "default": "",
+            "description": "%memotemplate.desc%"
+          },
           "memo-life-for-you.memoPath": {
             "type": "string",
             "default": "",
@@ -515,7 +617,10 @@
           "memo-life-for-you.aiProvider": {
             "type": "string",
             "default": "ollama",
-            "enum": ["ollama", "openai"],
+            "enum": [
+              "ollama",
+              "openai"
+            ],
             "description": "%aiProvider.desc%"
           },
           "memo-life-for-you.aiEndpoint": {
@@ -536,7 +641,11 @@
           "memo-life-for-you.aiTagLanguage": {
             "type": "string",
             "default": "auto",
-            "enum": ["auto", "ja", "en"],
+            "enum": [
+              "auto",
+              "ja",
+              "en"
+            ],
             "description": "%aiTagLanguage.desc%"
           },
           "memo-life-for-you.aiProxy": {
@@ -580,9 +689,11 @@
     "watch-tests": "tsc -p tsconfig.test.json -w",
     "test-compile": "tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint src",
-    "test": "npm run compile-tests && node --test out/test/test"
+    "test": "npm run compile-tests && node --test out/test/test",
+    "test:e2e": "npx playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.8",
     "@types/mustache": "^4.2.6",

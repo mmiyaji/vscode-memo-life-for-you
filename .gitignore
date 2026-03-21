@@ -6,3 +6,6 @@ dist
 *.cpuprofile
 .DS_Store
 .claude
+e2e/screenshots
+playwright-report
+test-results

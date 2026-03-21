@@ -79,16 +79,40 @@ export class memoConfigure {
         this.applyMemoConfDirSetting();
         this.updateConfiguration();
         this.safeReadConfig();
+        this.applyVscodeOverrides();
         this._waiting = false;
 
         vscode.workspace.onDidChangeConfiguration(() => {
             this.applyMemoConfDirSetting();
             this.updateConfiguration();
+            this.safeReadConfig();
+            this.applyVscodeOverrides();
         });
 
         fs.watchFile(upath.normalize(upath.join(this.memoconfdir, 'config.toml')), () => {
             this.safeReadConfig();
+            this.applyVscodeOverrides();
         });
+    }
+
+    /**
+     * VS Code settings override config.toml values.
+     * If a VS Code setting is non-empty, it takes priority.
+     */
+    private applyVscodeOverrides() {
+        const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+        const vsMemodir = cfg.get<string>('memodir');
+        if (vsMemodir && vsMemodir.trim() !== '') {
+            this.memodir = upath.normalizeTrim(vsMemodir.trim());
+        }
+        const vsMemotemplate = cfg.get<string>('memotemplate');
+        if (vsMemotemplate && vsMemotemplate.trim() !== '') {
+            this.memotemplate = upath.normalizeTrim(vsMemotemplate.trim());
+        }
+        const vsDatePathFormat = cfg.get<string>('memoDatePathFormat');
+        if (vsDatePathFormat && vsDatePathFormat.trim() !== '') {
+            this.memoDatePathFormat = vsDatePathFormat.trim();
+        }
     }
 
     public setMemoConfDir() {
@@ -118,23 +142,23 @@ export class memoConfigure {
         list.forEach((line) => {
             const array = line.split("=").map((value) => value.replace(/"/g, "").trim());
 
-            if (array[0]?.match(/^memodir$/)) {
+            if (array[0]?.match(/^memodir$/) && array[1]?.trim()) {
                 this.memodir = upath.normalizeTrim(array[1]);
             }
 
-            if (array[0]?.match(/^memotemplate$/)) {
+            if (array[0]?.match(/^memotemplate$/) && array[1]?.trim()) {
                 this.memotemplate = (upath.normalizeTrim(array[1]) === upath.normalizeTrim(".")) ? "" : upath.normalizeTrim(array[1]);
             }
 
-            if (array[0]?.match(/^memoDatePathFormat$/)) {
-                this.memoDatePathFormat = array[1];
+            if (array[0]?.match(/^memoDatePathFormat$/) && array[1]?.trim()) {
+                this.memoDatePathFormat = array[1].trim();
             }
         });
 
         return void 0;
     }
 
-    private safeReadConfig() {
+    protected safeReadConfig() {
         const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
         if (!fs.existsSync(configPath)) {
             return;

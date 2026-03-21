@@ -18,6 +18,8 @@
     "extension.memoOpenChrome.title": "Memo: Open Chrome with <html contenteditable>",
     "extension.memoOpenTypora.title": "Memo: Open Typora",
     "extension.memoAdmin.title": "Memo: Admin",
+    "memodir.desc": "Directory path where memo files are stored. Takes priority over config.toml.",
+    "memotemplate.desc": "Path to the default template file for new memos. Takes priority over config.toml.",
     "memoPath.desc": "Absolute path to the memo command",
     "serve-addr.desc": "Specify port number to `Memo: Serve`",
     "titlePrefix.desc": "When executing `Memo: Today's Quick Memo`, it automatically inserts the specified prefix string of the title",

@@ -18,6 +18,8 @@
     "extension.memoOpenChrome.title": "Memo: <html contenteditable> で Chrome を開く",
     "extension.memoOpenTypora.title": "Memo: Typora を開く",
     "extension.memoAdmin.title": "Memo: 管理画面",
+    "memodir.desc": "メモファイルの保存先ディレクトリパスです。config.toml より優先されます。",
+    "memotemplate.desc": "新規メモ用デフォルトテンプレートファイルのパスです。config.toml より優先されます。",
     "memoPath.desc": "memo コマンドの絶対パスです。",
     "serve-addr.desc": "`Memo: Serve` で使用するポート番号を指定します。",
     "titlePrefix.desc": "`Memo: Today's quick Memo` 実行時に、タイトルの先頭へ指定した接頭辞を自動で挿入します。",
