@@ -9,6 +9,7 @@ import { memoConfigure } from './memoConfigure';
 import { getMemoDateDirectory, getMemoRelativeDirectoryLabel } from './memoPath';
 import { AdminLocale, escapeHtml, MemoRecentItem, renderBarList, renderRecentFiles } from './memoAdminRender';
 import { MemoIndex, FileMeta } from './memoIndex';
+import { MemoSnippetProvider } from './memoSnippets';
 
 const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
@@ -20,6 +21,7 @@ type MemoStats = {
     pinnedFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; fileSizeLabel: string; mtimeMs: number }>;
     recentFiles: Array<{ label: string; title: string; pathLabel: string; createdAt: string; updatedAt: string; filename: string; fileSizeLabel: string; mtimeMs: number }>;
     calendarData: Record<string, { count: number; files: string[] }>;
+    tagCounts: Array<{ tag: string; count: number }>;
 };
 type MemoStatsCache = {
     key: string;
@@ -35,6 +37,11 @@ export class memoAdmin extends memoConfigure {
     private static statsCache: MemoStatsCache | undefined;
     private static memoIndex: MemoIndex | undefined;
     private static indexDisposable: vscode.Disposable | undefined;
+    private static snippetProvider: MemoSnippetProvider | undefined;
+
+    public static setSnippetProvider(provider: MemoSnippetProvider): void {
+        memoAdmin.snippetProvider = provider;
+    }
 
     public async initializeIndex(context: vscode.ExtensionContext): Promise<void> {
         this.readConfig();
@@ -127,6 +134,27 @@ export class memoAdmin extends memoConfigure {
                                 preview: true,
                                 preserveFocus: false
                             });
+                        }
+                        break;
+                    case 'searchTag':
+                        if (message.tag && memoAdmin.memoIndex) {
+                            const files = memoAdmin.memoIndex.getFilesByTag(message.tag);
+                            if (files.length === 0) {
+                                break;
+                            }
+                            const items = files.map(relativePath => ({
+                                label: upath.basename(relativePath),
+                                description: relativePath,
+                                absolutePath: memoAdmin.memoIndex.toAbsolutePath(relativePath),
+                            }));
+                            const picked = await vscode.window.showQuickPick(items, {
+                                placeHolder: `#${message.tag} (${files.length})`,
+                                ignoreFocusOut: true,
+                            });
+                            if (picked && fs.existsSync(picked.absolutePath)) {
+                                const doc = await vscode.workspace.openTextDocument(picked.absolutePath);
+                                await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.One, preview: true });
+                            }
                         }
                         break;
                     case 'openSettings':
@@ -528,6 +556,7 @@ export class memoAdmin extends memoConfigure {
                 pinnedFiles: [],
                 recentFiles: [],
                 calendarData: {},
+                tagCounts: [],
             };
         }
 
@@ -584,33 +613,44 @@ export class memoAdmin extends memoConfigure {
             const files = this.readFilesRecursively(this.memodir)
                 .filter((filename) => this.memoListDisplayExtname.includes(upath.extname(filename).replace(/^\./, '')));
 
-            const items = files.map((filename) => {
-                const stat = fs.statSync(filename);
-                const yearLabel = dateFns.format(stat.birthtime, 'yyyy');
-                const monthLabel = dateFns.format(stat.birthtime, 'yyyy/MM');
-                const dayLabel = dateFns.format(stat.birthtime, 'yyyy-MM-dd');
-                const relativePath = getMemoRelativeDirectoryLabel(this.memodir, filename);
-                const folderLabel = getMemoRelativeDirectoryLabel(this.memodir, upath.dirname(filename));
+            const items: MemoRecentItem[] = [];
+            for (const filename of files) {
+                try {
+                    const stat = fs.statSync(filename);
+                    const yearLabel = dateFns.format(stat.birthtime, 'yyyy');
+                    const monthLabel = dateFns.format(stat.birthtime, 'yyyy/MM');
+                    const dayLabel = dateFns.format(stat.birthtime, 'yyyy-MM-dd');
+                    const relativePath = getMemoRelativeDirectoryLabel(this.memodir, filename);
+                    const folderLabel = getMemoRelativeDirectoryLabel(this.memodir, upath.dirname(filename));
 
-                yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
-                monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
-                addDayEntry(dayLabel, relativePath);
-                folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
+                    yearMap.set(yearLabel, (yearMap.get(yearLabel) ?? 0) + 1);
+                    monthMap.set(monthLabel, (monthMap.get(monthLabel) ?? 0) + 1);
+                    addDayEntry(dayLabel, relativePath);
+                    folderMap.set(folderLabel, (folderMap.get(folderLabel) ?? 0) + 1);
 
-                return this.createRecentFileEntry(filename, stat);
-            });
+                    items.push(this.createRecentFileEntry(filename, stat));
+                } catch {
+                    // file may have been deleted between readdir and stat
+                }
+            }
             recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 8);
         }
 
         const recentFiles = recentCandidates;
-        const pinnedFiles = (this.memoPinnedFiles ?? [])
-            .map((filename) => upath.normalizeTrim(filename))
-            .filter((filename, index, array) => !!filename && array.indexOf(filename) === index && fs.existsSync(filename))
-            .map((filename) => {
+        const pinnedFiles: MemoRecentItem[] = [];
+        for (const raw of (this.memoPinnedFiles ?? [])) {
+            const filename = upath.normalizeTrim(raw);
+            if (!filename || pinnedFiles.some((p) => this.normalizeWorkspacePath(p.filename) === this.normalizeWorkspacePath(filename))) {
+                continue;
+            }
+            try {
                 const stat = fs.statSync(filename);
-                return this.createRecentFileEntry(filename, stat);
-            })
-            .sort((a, b) => b.mtimeMs - a.mtimeMs);
+                pinnedFiles.push(this.createRecentFileEntry(filename, stat));
+            } catch {
+                // file may have been deleted
+            }
+        }
+        pinnedFiles.sort((a, b) => b.mtimeMs - a.mtimeMs);
 
         let totalFiles = 0;
         for (const count of yearMap.values()) {
@@ -622,6 +662,14 @@ export class memoAdmin extends memoConfigure {
             calendarData[day] = entry;
         }
 
+        let tagCounts: Array<{ tag: string; count: number }> = [];
+        if (memoAdmin.memoIndex) {
+            const tagIndex = memoAdmin.memoIndex.getTagIndex();
+            tagCounts = Array.from(tagIndex.entries())
+                .map(([tag, files]) => ({ tag, count: files.length }))
+                .sort((a, b) => b.count - a.count);
+        }
+
         const stats = {
             totalFiles,
             yearCounts: this.mapToSortedArray(yearMap),
@@ -630,6 +678,7 @@ export class memoAdmin extends memoConfigure {
             pinnedFiles,
             recentFiles,
             calendarData,
+            tagCounts,
         };
         memoAdmin.statsCache = {
             key: cacheKey,
@@ -795,19 +844,7 @@ export class memoAdmin extends memoConfigure {
             --mica-tint-soft: color-mix(in srgb, var(--accent) 3%, transparent);
         }
 
-        body[data-theme="blue"] {
-            --accent: #3794ff;
-            --accent-strong: #58a6ff;
-            --button-bg: #3794ff;
-            --button-hover: #58a6ff;
-            --accent-soft: rgba(55, 148, 255, 0.12);
-            --accent-soft-strong: rgba(55, 148, 255, 0.2);
-            --accent-panel: rgba(55, 148, 255, 0.08);
-            --accent-card: rgba(55, 148, 255, 0.06);
-            --accent-border: rgba(55, 148, 255, 0.34);
-            --mica-tint: rgba(78, 124, 186, 0.22);
-            --mica-tint-soft: rgba(78, 124, 186, 0.12);
-        }
+        /* blue theme uses :root defaults */
 
         body[data-theme="teal"] {
             --accent: #1f8f88;
@@ -1314,6 +1351,23 @@ export class memoAdmin extends memoConfigure {
             flex-wrap: wrap;
         }
 
+        .action-button {
+            appearance: none;
+            border: 1px solid var(--border);
+            background: var(--surface-bg);
+            color: var(--text);
+            padding: 4px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .action-button:hover {
+            background: var(--accent-soft);
+            border-color: var(--accent);
+        }
+
         .action-button--danger {
             border-color: rgba(248, 81, 73, 0.4);
             color: #f85149;
@@ -1323,6 +1377,66 @@ export class memoAdmin extends memoConfigure {
             background: rgba(248, 81, 73, 0.12);
             border-color: rgba(248, 81, 73, 0.6);
         }
+
+        .tag-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 4px 0;
+        }
+        .tag-chip {
+            appearance: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 10px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-bg);
+            color: var(--accent);
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .tag-chip:hover {
+            background: var(--accent-soft);
+            border-color: var(--accent-border);
+        }
+        .tag-count {
+            font-size: 11px;
+            color: var(--text-sub);
+        }
+
+        .snippet-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .snippet-table th {
+            text-align: left;
+            padding: 6px 8px;
+            border-bottom: 1px solid var(--border);
+            color: var(--muted);
+            font-weight: 500;
+        }
+        .snippet-table td {
+            padding: 5px 8px;
+            border-bottom: 1px solid rgba(128,128,128,0.1);
+        }
+        .snippet-table code {
+            background: var(--accent-soft);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+        .snippet-status {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+        .snippet-status .ok { color: #3fb950; }
+        .snippet-status .warn { color: #d29922; }
+        .snippet-status .err { color: #f85149; }
 
         .footer {
             display: flex;
@@ -1824,50 +1938,15 @@ export class memoAdmin extends memoConfigure {
                 <div class="subtitle">${t('memoAdmin.summary', 'Current memo storage and operation summary')}</div>
             </div>
             <div class="header-actions">
+                ${indexStatus ? `<span class="index-badge index-badge--ok" title="${t('memoAdmin.indexActive', 'Active')}: ${indexStatus.entries} ${t('memoAdmin.indexEntries', 'Indexed files')}">&#9679; Index</span>` : `<span class="index-badge index-badge--off" title="${t('memoAdmin.indexInactive', 'Inactive')}">&#9675; Index</span>`}
                 <button class="icon-button" type="button" data-command="refreshAdmin" title="${t('memoAdmin.refresh', 'Refresh')}">&#x21bb;</button>
             </div>
         </header>
 
         <section class="hero">
-            <div class="toolbar">
-                <div class="toolbar-group actions">
-                    <button class="primary" data-command="newMemo">${t('memoAdmin.newMemo', 'New memo')}</button>
-                    <button class="primary" data-command="searchMemo">${t('memoAdmin.searchMemo', 'Search memo')}</button>
-                    <button class="secondary" data-command="openFolder">${t('memoAdmin.openFolder', 'Open folder')}</button>
-                </div>
-            </div>
-
-                <div class="summary">
-                <div class="metric">
-                    <div class="metric-label">${t('memoAdmin.memoRoot', 'Memo root')}</div>
-                    <code>${escapeHtml(safeMemoDir)}</code>
-                </div>
-                <div class="metric">
-                    <div class="metric-label">${t('memoAdmin.currentDateDir', 'Today folder')}</div>
-                    <div class="metric-value">${escapeHtml(currentDateDirLabel)}</div>
-                </div>
-                <div class="metric">
-                    <div class="metric-label">${t('memoAdmin.totalFiles', 'Total files')}</div>
-                    <div class="metric-value">${stats.totalFiles}</div>
-                </div>
-            </div>
-
-            <div class="hint">
-                <span>${t('memoAdmin.datePathFormat', 'Date folder format')}: <code>${escapeHtml(this.memoDatePathFormat || '(flat)')}</code></span>
-                <span>${t('memoAdmin.appearance', 'Appearance')}: <code>${escapeHtml(appearanceLabel)}</code></span>
-                <span>${t('memoAdmin.colorTheme', 'Color theme')}: <code>${escapeHtml(colorThemeLabel)}</code></span>
-                <span>${t('memoAdmin.language', 'Language')}: <code>${escapeHtml(this.getLanguageLabel(locale))}</code></span>
-                <span>${t('memoAdmin.themeHint', 'Visual settings are managed from VS Code Settings.')}</span>
-            </div>
-            <div class="tips">
-                <div class="tips-header">${t('memoAdmin.tips', 'Tips')}</div>
-                <div class="tips-list">
-                    ${tips.map((tip) => `<div class="tips-item">${escapeHtml(tip)}</div>`).join('')}
-                </div>
-            </div>
             ${hasValidMemoDir ? '' : `<div class="warning">${t('memoAdmin.invalidMemoDirWarning', 'The current memo root does not exist. Update the core settings below to recover.')}</div>`}
 
-            <details class="config-block">
+            <details class="config-block"${hasValidMemoDir ? '' : ' open'}>
                 <summary>
                     <span class="summary-label">
                         <span class="summary-icon">&#9881;</span>
@@ -1907,9 +1986,62 @@ export class memoAdmin extends memoConfigure {
                     <button class="primary" data-command="saveCoreSettings">${t('memoAdmin.save', 'Save')}</button>
                 </div>
             </details>
+
+            <div class="toolbar">
+                <div class="toolbar-group actions">
+                    <button class="primary" data-command="newMemo">${t('memoAdmin.newMemo', 'New memo')}</button>
+                    <button class="primary" data-command="searchMemo">${t('memoAdmin.searchMemo', 'Search memo')}</button>
+                    <button class="secondary" data-command="openFolder">${t('memoAdmin.openFolder', 'Open folder')}</button>
+                </div>
+            </div>
+
+            <div class="summary">
+                <div class="metric">
+                    <div class="metric-label">${t('memoAdmin.memoRoot', 'Memo root')}</div>
+                    <code>${escapeHtml(safeMemoDir)}</code>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">${t('memoAdmin.currentDateDir', 'Today folder')}</div>
+                    <div class="metric-value">${escapeHtml(currentDateDirLabel)}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">${t('memoAdmin.totalFiles', 'Total files')}</div>
+                    <div class="metric-value">${stats.totalFiles}</div>
+                </div>
+            </div>
+
+            <div class="hint">
+                <span>${t('memoAdmin.datePathFormat', 'Date folder format')}: <code>${escapeHtml(this.memoDatePathFormat || '(flat)')}</code></span>
+                <span>${t('memoAdmin.appearance', 'Appearance')}: <code>${escapeHtml(appearanceLabel)}</code></span>
+                <span>${t('memoAdmin.colorTheme', 'Color theme')}: <code>${escapeHtml(colorThemeLabel)}</code></span>
+                <span>${t('memoAdmin.language', 'Language')}: <code>${escapeHtml(this.getLanguageLabel(locale))}</code></span>
+                <span>${t('memoAdmin.themeHint', 'Visual settings are managed from VS Code Settings.')}</span>
+            </div>
+            <div class="tips">
+                <div class="tips-header">${t('memoAdmin.tips', 'Tips')}</div>
+                <div class="tips-list">
+                    ${tips.map((tip) => `<div class="tips-item">${escapeHtml(tip)}</div>`).join('')}
+                </div>
+            </div>
         </section>
 
         <section class="stack">
+            <article class="card">
+                <div class="card-header">
+                    <h2 class="card-title">${t('memoAdmin.recentHistory', 'Recent history')}</h2>
+                    <div class="card-caption">${t('memoAdmin.latest8Updated', 'Latest 8 updates')}</div>
+                </div>
+                ${renderRecentFiles(stats.recentFiles, {
+                    noDataLabel: t('memoAdmin.noData', 'No data'),
+                    pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
+                    showPinToggle: true,
+                    pinLabel: t('memoAdmin.pin', 'Pin'),
+                    unpinLabel: t('memoAdmin.unpin', 'Unpin'),
+                    createdLabel: t('memoAdmin.created', 'Created'),
+                    updatedLabel: t('memoAdmin.updated', 'Updated'),
+                    sizeLabel: t('memoAdmin.size', 'Size')
+                })}
+            </article>
             <article class="card">
                 <div class="card-header">
                     <h2 class="card-title">${t('memoAdmin.calendar', 'Calendar')}</h2>
@@ -1926,6 +2058,62 @@ export class memoAdmin extends memoConfigure {
                     </div>
                     <div class="calendar-grid" id="cal-grid"></div>
                 </div>
+            </article>
+            ${stats.tagCounts.length > 0 ? `
+            <article class="card">
+                <div class="card-header">
+                    <h2 class="card-title">${t('memoAdmin.tags', 'Tags')}</h2>
+                    <div class="card-caption">${t('memoAdmin.tagsCaption', 'Frontmatter tags across all memos')}</div>
+                </div>
+                <div class="tag-cloud">
+                    ${stats.tagCounts.map(({ tag, count }) =>
+                        `<button class="tag-chip" data-search-tag="${escapeHtml(tag)}" title="${count} ${count === 1 ? 'memo' : 'memos'}">#${escapeHtml(tag)} <span class="tag-count">${count}</span></button>`
+                    ).join('')}
+                </div>
+            </article>
+            ` : ''}
+            ${(() => {
+                const ss = memoAdmin.snippetProvider?.getStatus();
+                if (!ss) { return ''; }
+                return `
+            <article class="card">
+                <div class="card-header">
+                    <h2 class="card-title">${t('memoAdmin.snippets', 'Snippets')}</h2>
+                    <div class="card-caption">${t('memoAdmin.snippetsCaption', 'Custom completions for Markdown')}</div>
+                </div>
+                <div class="snippet-status">
+                    ${t('memoAdmin.snippetsDir', 'Directory')}: <code>${escapeHtml(ss.dir || '(not set)')}</code>
+                    ${ss.exists ? `<span class="ok">&#10003;</span>` : `<span class="err">&#10007; ${t('memoAdmin.snippetsDirMissing', 'not found')}</span>`}
+                    &nbsp;|&nbsp; ${t('memoAdmin.snippetsFiles', 'Files')}: ${ss.fileCount} &nbsp;|&nbsp; ${t('memoAdmin.snippetsLoaded', 'Loaded')}: ${ss.snippetCount}
+                </div>
+                ${ss.snippetCount > 0 ? `
+                <table class="snippet-table">
+                    <thead><tr>
+                        <th>Prefix</th>
+                        <th>${t('memoAdmin.snippetName', 'Name')}</th>
+                        <th>${t('memoAdmin.snippetDesc', 'Description')}</th>
+                    </tr></thead>
+                    <tbody>
+                        ${ss.snippets.map(s => `<tr><td><code>${escapeHtml(s.prefix)}</code></td><td>${escapeHtml(s.name)}</td><td>${escapeHtml(s.description || '')}</td></tr>`).join('')}
+                    </tbody>
+                </table>
+                ` : `<div class="empty-state">${t('memoAdmin.snippetsEmpty', 'No snippets loaded. Place VS Code snippet JSON files in the snippets directory.')}</div>`}
+            </article>`;
+            })()}
+            <article class="card">
+                <div class="card-header">
+                    <h2 class="card-title">${t('memoAdmin.pinnedMemos', 'Pinned memos')}</h2>
+                    <div class="card-caption">${t('memoAdmin.pinnedCaption', 'Fixed access')}</div>
+                </div>
+                ${stats.pinnedFiles.length > 0 ? renderRecentFiles(stats.pinnedFiles, {
+                    noDataLabel: t('memoAdmin.noData', 'No data'),
+                    pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
+                    showPinToggle: true,
+                    pinLabel: t('memoAdmin.unpin', 'Unpin'),
+                    createdLabel: t('memoAdmin.created', 'Created'),
+                    updatedLabel: t('memoAdmin.updated', 'Updated'),
+                    sizeLabel: t('memoAdmin.size', 'Size')
+                }) : `<div class="empty-state">${t('memoAdmin.pinnedEmpty', 'No pinned memos. Use the pin button in Recent history to add.')}</div>`}
             </article>
             <details class="detail-block">
                 <summary>
@@ -1959,37 +2147,6 @@ export class memoAdmin extends memoConfigure {
                     </section>
                 </div>
             </details>
-            ${stats.pinnedFiles.length > 0 ? `<article class="card">
-                <div class="card-header">
-                    <h2 class="card-title">${t('memoAdmin.pinnedMemos', 'Pinned memos')}</h2>
-                    <div class="card-caption">${t('memoAdmin.pinnedCaption', 'Fixed access')}</div>
-                </div>
-                ${renderRecentFiles(stats.pinnedFiles, {
-                    noDataLabel: t('memoAdmin.noData', 'No data'),
-                    pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
-                    showPinToggle: true,
-                    pinLabel: t('memoAdmin.unpin', 'Unpin'),
-                    createdLabel: t('memoAdmin.created', 'Created'),
-                    updatedLabel: t('memoAdmin.updated', 'Updated'),
-                    sizeLabel: t('memoAdmin.size', 'Size')
-                })}
-            </article>` : ''}
-            <article class="card">
-                <div class="card-header">
-                    <h2 class="card-title">${t('memoAdmin.recentHistory', 'Recent history')}</h2>
-                    <div class="card-caption">${t('memoAdmin.latest8Updated', 'Latest 8 updates')}</div>
-                </div>
-                ${renderRecentFiles(stats.recentFiles, {
-                    noDataLabel: t('memoAdmin.noData', 'No data'),
-                    pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
-                    showPinToggle: true,
-                    pinLabel: t('memoAdmin.pin', 'Pin'),
-                    unpinLabel: t('memoAdmin.unpin', 'Unpin'),
-                    createdLabel: t('memoAdmin.created', 'Created'),
-                    updatedLabel: t('memoAdmin.updated', 'Updated'),
-                    sizeLabel: t('memoAdmin.size', 'Size')
-                })}
-            </article>
             <details class="detail-block">
                 <summary>
                     <span class="summary-label">
@@ -2113,9 +2270,9 @@ export class memoAdmin extends memoConfigure {
                 const prevDays = prevLast.getDate();
                 for (let i = startDow - 1; i >= 0; i--) {
                     const day = prevDays - i;
-                    const m = viewMonth === 0 ? 12 : viewMonth;
-                    const y = viewMonth === 0 ? viewYear - 1 : viewYear;
-                    const dateStr = y + '-' + pad(m) + '-' + pad(day);
+                    const pm = viewMonth === 0 ? 12 : viewMonth;
+                    const py = viewMonth === 0 ? viewYear - 1 : viewYear;
+                    const dateStr = py + '-' + pad(pm) + '-' + pad(day);
                     const dow = (startDow - i - 1 + 7) % 7;
                     html += cellHtml(day, dateStr, dow, true);
                 }
@@ -2259,6 +2416,12 @@ export class memoAdmin extends memoConfigure {
         document.querySelectorAll('button[data-unpin-file]').forEach((button) => {
             button.addEventListener('click', () => {
                 vscode.postMessage({ command: 'unpinRecentFile', filename: button.dataset.unpinFile });
+            });
+        });
+
+        document.querySelectorAll('button[data-search-tag]').forEach((button) => {
+            button.addEventListener('click', () => {
+                vscode.postMessage({ command: 'searchTag', tag: button.dataset.searchTag });
             });
         });
 
@@ -2466,6 +2629,9 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.latest8Updated': '\u66f4\u65b0\u304c\u65b0\u3057\u3044 8 \u4ef6',
     'memoAdmin.pinnedMemos': '\u30d4\u30f3\u7559\u3081\u30e1\u30e2',
     'memoAdmin.pinnedCaption': '\u56fa\u5b9a\u30a2\u30af\u30bb\u30b9',
+    'memoAdmin.pinnedEmpty': '\u30d4\u30f3\u7559\u3081\u30e1\u30e2\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u6700\u8fd1\u306e\u5c65\u6b74\u306e\u30d4\u30f3\u30dc\u30bf\u30f3\u304b\u3089\u8ffd\u52a0\u3067\u304d\u307e\u3059\u3002',
+    'memoAdmin.tags': '\u30bf\u30b0',
+    'memoAdmin.tagsCaption': '\u5168\u30e1\u30e2\u306e frontmatter \u30bf\u30b0',
     'memoAdmin.pin': '\u30d4\u30f3\u7559\u3081',
     'memoAdmin.unpin': '\u89e3\u9664',
     'memoAdmin.created': '\u4f5c\u6210',
@@ -2515,7 +2681,16 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.calNext': '\u6b21\u3078',
     'memoAdmin.calToday': '\u4eca\u65e5',
     'memoAdmin.calMonth': '\u6708',
-    'memoAdmin.calWeek': '\u9031'
+    'memoAdmin.calWeek': '\u9031',
+    'memoAdmin.snippets': '\u30b9\u30cb\u30da\u30c3\u30c8',
+    'memoAdmin.snippetsCaption': 'Markdown \u7528\u30ab\u30b9\u30bf\u30e0\u88dc\u5b8c',
+    'memoAdmin.snippetsDir': '\u30c7\u30a3\u30ec\u30af\u30c8\u30ea',
+    'memoAdmin.snippetsDirMissing': '\u898b\u3064\u304b\u308a\u307e\u305b\u3093',
+    'memoAdmin.snippetsFiles': '\u30d5\u30a1\u30a4\u30eb\u6570',
+    'memoAdmin.snippetsLoaded': '\u8aad\u307f\u8fbc\u307f\u6e08\u307f',
+    'memoAdmin.snippetName': '\u540d\u524d',
+    'memoAdmin.snippetDesc': '\u8aac\u660e',
+    'memoAdmin.snippetsEmpty': '\u30b9\u30cb\u30da\u30c3\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u30b9\u30cb\u30da\u30c3\u30c8\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u306b VS Code \u30b9\u30cb\u30da\u30c3\u30c8 JSON \u30d5\u30a1\u30a4\u30eb\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
 };
 
 const JA_TIPS: string[] = [

@@ -47,6 +47,8 @@ export class memoConfigure {
     public memoNewFilenameFromClipboard: boolean;
     public memoNewFilenameFromSelection: boolean;
     public memoNewFilNameDateSuffix: string;
+    public memoTemplatesDir: string;
+    public memoSnippetsDir: string;
     public memoDatePathFormat: string;
     public memoAdminAppearance: string;
     public memoAdminColorTheme: string;
@@ -74,11 +76,13 @@ export class memoConfigure {
 
     constructor() {
         this.setMemoConfDir();
+        this.applyMemoConfDirSetting();
         this.updateConfiguration();
         this.safeReadConfig();
         this._waiting = false;
 
         vscode.workspace.onDidChangeConfiguration(() => {
+            this.applyMemoConfDirSetting();
             this.updateConfiguration();
         });
 
@@ -98,6 +102,13 @@ export class memoConfigure {
             this.memoconfdir = upath.normalize(upath.join(process.env.HOME, ".config", "memo"));
         }
         return void 0;
+    }
+
+    private applyMemoConfDirSetting() {
+        const userConfDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoconfdir');
+        if (userConfDir && userConfDir.trim() !== '') {
+            this.memoconfdir = upath.normalize(userConfDir.trim());
+        }
     }
 
     public readConfig() {
@@ -171,6 +182,8 @@ export class memoConfigure {
         this.memoNewFilenameFromClipboard = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoNewFilenameFromClipboard');
         this.memoNewFilenameFromSelection = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoNewFilenameFromSelection');
         this.memoNewFilNameDateSuffix = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoNewFilNameDateSuffix');
+        this.memoTemplatesDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoTemplatesDir');
+        this.memoSnippetsDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoSnippetsDir');
         this.memoAdminAppearance = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminAppearance');
         this.memoAdminColorTheme = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminColorTheme');
         this.memoDisplayLanguage = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoDisplayLanguage');

@@ -16,7 +16,7 @@ import { memoOpenFolder } from './memoOpenFolder';
 import { memoOpenChrome } from './memoOpenChrome';
 import { memoOpenTypora } from './memoOpenTypora';
 import { memoAdmin } from './memoAdmin';
-// import { MemoTreeProvider } from './memoTreeProvider';
+import { MemoSnippetProvider } from './memoSnippets';
 
 // import {MDDocumentContentProvider, isMarkdownFile, getMarkdownUri, showPreview} from './MDDocumentContentProvider'
 
@@ -64,6 +64,30 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(() => {
         new memoConfigure().updateConfiguration();
     }));
+
+    // Memo Snippets
+    const snippetConfig = new memoConfigure();
+    const snippetProvider = new MemoSnippetProvider(() => {
+        if (snippetConfig.memoSnippetsDir && snippetConfig.memoSnippetsDir.trim() !== '') {
+            return snippetConfig.memoSnippetsDir.trim();
+        }
+        return snippetConfig.memodir ? upath.join(snippetConfig.memodir, '.snippets') : '';
+    });
+    context.subscriptions.push(
+        vscode.languages.registerCompletionItemProvider(
+            { language: 'markdown', scheme: 'file' },
+            snippetProvider,
+            ...('abcdefghijklmnopqrstuvwxyz'.split(''))
+        )
+    );
+    context.subscriptions.push(snippetProvider.startWatching());
+    memoAdmin.setSnippetProvider(snippetProvider);
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(() => {
+            snippetConfig.updateConfiguration();
+            snippetProvider.reload();
+        })
+    );
 
     void restorePendingMemoAdmin(context, memoadmin);
     void openMemoAdminOnStartup(context, memoadmin);

@@ -4,15 +4,18 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as upath from 'upath';
+import matter = require('gray-matter');
 
 export type FileMeta = {
     birthtime: number;
     mtime: number;
     size: number;
+    title?: string;
+    tags?: string[];
 };
 
 type IndexData = {
-    version: 1;
+    version: 1 | 2;
     memodir: string;
     entries: Record<string, FileMeta>;
 };
@@ -26,6 +29,7 @@ export class MemoIndex {
 
     private entries = new Map<string, FileMeta>();
     private dirty = false;
+    private needsFrontmatterScan = false;
     private debounceTimer: ReturnType<typeof setTimeout> | undefined;
     private savePromise: Promise<void> = Promise.resolve();
     private watcher: vscode.FileSystemWatcher | undefined;
@@ -57,11 +61,11 @@ export class MemoIndex {
     }
 
     async load(): Promise<LoadResult> {
-        const readOne = async (filePath: string): Promise<Map<string, FileMeta> | undefined> => {
+        const readOne = async (filePath: string): Promise<{ map: Map<string, FileMeta>; version: number } | undefined> => {
             try {
                 const raw = await fsp.readFile(filePath, 'utf8');
                 const data = JSON.parse(raw) as Partial<IndexData>;
-                if (data.version !== 1 || typeof data.entries !== 'object' || data.entries === null) {
+                if ((data.version !== 1 && data.version !== 2) || typeof data.entries !== 'object' || data.entries === null) {
                     return undefined;
                 }
                 const map = new Map<string, FileMeta>();
@@ -70,7 +74,7 @@ export class MemoIndex {
                         map.set(key, meta);
                     }
                 }
-                return map;
+                return { map, version: data.version };
             } catch (error: unknown) {
                 const nodeError = error as NodeJS.ErrnoException;
                 if (nodeError?.code === 'ENOENT') {
@@ -82,13 +86,17 @@ export class MemoIndex {
 
         const primary = await readOne(this.primaryPath);
         if (primary) {
-            this.entries = primary;
+            this.entries = primary.map;
+            if (primary.version < 2) {
+                this.dirty = true;
+                this.needsFrontmatterScan = true;
+            }
             return { status: 'ok' };
         }
 
         const backup = await readOne(this.backupPath);
         if (backup) {
-            this.entries = backup;
+            this.entries = backup.map;
             this.dirty = true;
             return { status: 'backup' };
         }
@@ -102,7 +110,7 @@ export class MemoIndex {
     async save(): Promise<void> {
         this.savePromise = this.savePromise.then(async () => {
             const data: IndexData = {
-                version: 1,
+                version: 2,
                 memodir: this.memodir,
                 entries: Object.fromEntries(this.entries),
             };
@@ -130,10 +138,13 @@ export class MemoIndex {
             try {
                 const stat = fs.statSync(absolutePath);
                 if (!existing || existing.mtime !== stat.mtime.getTime() || existing.size !== stat.size) {
+                    const fm = this.parseFrontmatter(absolutePath);
                     this.entries.set(relativePath, {
                         birthtime: stat.birthtime.getTime(),
                         mtime: stat.mtime.getTime(),
                         size: stat.size,
+                        ...fm.title ? { title: fm.title } : {},
+                        ...fm.tags?.length ? { tags: fm.tags } : {},
                     });
                     changed = true;
                 }
@@ -149,6 +160,21 @@ export class MemoIndex {
             if (!diskRelativePaths.has(key)) {
                 this.entries.delete(key);
                 changed = true;
+            }
+        }
+
+        if (this.needsFrontmatterScan) {
+            this.needsFrontmatterScan = false;
+            for (const [relativePath, meta] of this.entries) {
+                if (meta.tags === undefined && meta.title === undefined) {
+                    const absolutePath = this.toAbsolutePath(relativePath);
+                    const fm = this.parseFrontmatter(absolutePath);
+                    if (fm.title || fm.tags?.length) {
+                        meta.title = fm.title;
+                        meta.tags = fm.tags;
+                        changed = true;
+                    }
+                }
             }
         }
 
@@ -193,10 +219,13 @@ export class MemoIndex {
             try {
                 const stat = fs.statSync(absolutePath);
                 const relativePath = this.toRelativePath(absolutePath);
+                const fm = this.parseFrontmatter(absolutePath);
                 this.update(relativePath, {
                     birthtime: stat.birthtime.getTime(),
                     mtime: stat.mtime.getTime(),
                     size: stat.size,
+                    ...fm.title ? { title: fm.title } : {},
+                    ...fm.tags?.length ? { tags: fm.tags } : {},
                 });
             } catch {
                 // file may have been deleted immediately
@@ -306,6 +335,62 @@ export class MemoIndex {
         return this.extnames.has(ext);
     }
 
+    private parseFrontmatter(absolutePath: string): { title?: string; tags?: string[] } {
+        try {
+            const content = fs.readFileSync(absolutePath, 'utf8');
+            const { data } = matter(content);
+            const result: { title?: string; tags?: string[] } = {};
+            if (typeof data.title === 'string' && data.title) {
+                result.title = data.title;
+            }
+            if (Array.isArray(data.tags)) {
+                result.tags = data.tags.filter((t: unknown) => typeof t === 'string' && t);
+            }
+            return result;
+        } catch {
+            return {};
+        }
+    }
+
+    getTagIndex(): Map<string, string[]> {
+        const tagMap = new Map<string, string[]>();
+        for (const [relativePath, meta] of this.entries) {
+            if (meta.tags) {
+                for (const tag of meta.tags) {
+                    const files = tagMap.get(tag);
+                    if (files) {
+                        files.push(relativePath);
+                    } else {
+                        tagMap.set(tag, [relativePath]);
+                    }
+                }
+            }
+        }
+        return tagMap;
+    }
+
+    getFilesByTag(tag: string): string[] {
+        const files: string[] = [];
+        for (const [relativePath, meta] of this.entries) {
+            if (meta.tags?.includes(tag)) {
+                files.push(relativePath);
+            }
+        }
+        return files;
+    }
+
+    getAllTags(): string[] {
+        const tags = new Set<string>();
+        for (const meta of this.entries.values()) {
+            if (meta.tags) {
+                for (const tag of meta.tags) {
+                    tags.add(tag);
+                }
+            }
+        }
+        return Array.from(tags).sort();
+    }
+
     private readFilesRecursively(dir: string, result: Set<string>): void {
         let dirents: fs.Dirent[];
         try {
@@ -314,6 +399,9 @@ export class MemoIndex {
             return;
         }
         for (const dirent of dirents) {
+            if (dirent.name.startsWith('.')) {
+                continue;
+            }
             const fullpath = upath.normalize(upath.join(dir, dirent.name));
             if (dirent.isDirectory()) {
                 this.readFilesRecursively(fullpath, result);

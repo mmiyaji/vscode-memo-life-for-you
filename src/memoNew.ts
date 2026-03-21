@@ -72,7 +72,7 @@ export class memoNew extends memoConfigure  {
             value: `${selectString.substr(0,49)}`,
             ignoreFocusOut: true
         }).then(
-            (title) => {
+            async (title) => {
                 if (title == undefined) { // キャンセル処理: ESC を押した時に undefined になる
                     return void 0;
                 }
@@ -87,11 +87,17 @@ export class memoNew extends memoConfigure  {
                 const targetDir = ensureMemoDateDirectory(this.memodir, this.memoDatePathFormat);
                 file = upath.normalize(upath.join(targetDir, file));
 
+                let fileExists = false;
                 try {
-                    // fs.accessSync(this.memodir);
                     fs.statSync(file);
-                } catch(err) {
-                    const content = this.memoTemplate(title, fileNameDateFormat);
+                    fileExists = true;
+                } catch {
+                    // file does not exist — will create
+                }
+
+                if (!fileExists) {
+                    const selectedTemplate = await this.pickTemplate();
+                    const content = this.memoTemplate(title, fileNameDateFormat, selectedTemplate);
                     fs.writeFileSync(file, content);
                 }
 
@@ -216,16 +222,67 @@ export class memoNew extends memoConfigure  {
     /**
      * memoTemplate
      */
-    private memoTemplate(title: string, date: string): string {
-        if (!this.memotemplate) {
+    private memoTemplate(title: string, date: string, templatePath?: string): string {
+        const tpl = templatePath || this.memotemplate;
+        if (!tpl) {
             return "# " + `${date}` + " " + `${title}` + os.EOL + os.EOL;
         }
-        const content = fs.readFileSync(this.memotemplate).toString();
+        const content = fs.readFileSync(tpl).toString();
         const params = {
             ".Title": title,
             ".Date": date
         };
         return Mustache.render(content, params);
+    }
+
+    /**
+     * List template files from the templates directory and let user pick one.
+     * Returns the selected template path, or undefined to use the default.
+     */
+    private async pickTemplate(): Promise<string | undefined> {
+        const templatesDir = this.memoTemplatesDir
+            ? upath.normalize(this.memoTemplatesDir)
+            : upath.normalize(upath.join(this.memoconfdir, '.templates'));
+        if (!fs.existsSync(templatesDir)) {
+            return undefined;
+        }
+
+        let files: string[];
+        try {
+            files = fs.readdirSync(templatesDir)
+                .filter(f => f.endsWith('.md'))
+                .sort();
+        } catch {
+            return undefined;
+        }
+
+        if (files.length === 0) {
+            return undefined;
+        }
+
+        if (files.length === 1) {
+            return upath.join(templatesDir, files[0]);
+        }
+
+        const defaultLabel = localize('memoNew.defaultTemplate', '(Default template)');
+        const items: vscode.QuickPickItem[] = [
+            { label: defaultLabel, description: '' },
+            ...files.map(f => ({
+                label: f.replace(/\.md$/, ''),
+                description: f,
+            })),
+        ];
+
+        const picked = await vscode.window.showQuickPick(items, {
+            placeHolder: localize('memoNew.pickTemplate', 'Select a template'),
+            ignoreFocusOut: true,
+        });
+
+        if (!picked || picked.label === defaultLabel) {
+            return undefined;
+        }
+
+        return upath.join(templatesDir, picked.description);
     }
 
     private async openMarkdownPreviewIfConfigured(): Promise<void> {
