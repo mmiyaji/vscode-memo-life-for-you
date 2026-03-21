@@ -39,7 +39,8 @@ function getAiConfig(): AiConfig {
     };
 }
 
-function shouldBypassProxy(hostname: string, noProxy: string): boolean {
+/** @internal exported for testing */
+export function shouldBypassProxy(hostname: string, noProxy: string): boolean {
     if (!noProxy) { return false; }
     const entries = noProxy.split(',').map(s => s.trim().toLowerCase());
     const host = hostname.toLowerCase();
@@ -171,7 +172,8 @@ function isJa(config: AiConfig): boolean {
 
 // ── 1. Auto Tag ─────────────────────────────────────────────
 
-function buildTagPrompt(content: string, language: string, existingTags: string[]): string {
+/** @internal exported for testing */
+export function buildTagPrompt(content: string, language: string, existingTags: string[]): string {
     const tagList = existingTags.length > 0 ? existingTags.join(', ') : '';
     const ja = language === 'ja';
 
@@ -205,7 +207,8 @@ function buildTagPrompt(content: string, language: string, existingTags: string[
     return lines.join('\n');
 }
 
-function parseTags(raw: string): string[] {
+/** @internal exported for testing */
+export function parseTags(raw: string): string[] {
     const jsonMatch = raw.match(/\[[\s\S]*?\]/);
     if (!jsonMatch) { return []; }
     try {
@@ -365,7 +368,8 @@ export async function memoRelated(memodir: string, listExtnames: string[]): Prom
     }
 }
 
-function collectRecentFiles(memodir: string, extnames: string[], maxFiles: number): Array<{ path: string; content: string; mtime: number }> {
+/** @internal exported for testing */
+export function collectRecentFiles(memodir: string, extnames: string[], maxFiles: number): Array<{ path: string; content: string; mtime: number }> {
     const results: Array<{ path: string; content: string; mtime: number }> = [];
 
     function walk(dir: string) {

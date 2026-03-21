@@ -1618,6 +1618,27 @@ export class memoAdmin extends memoConfigure {
             color: var(--muted);
         }
 
+        .card-toggle {
+            cursor: pointer;
+            list-style: none;
+            position: relative;
+            padding-right: 24px;
+        }
+        .card-toggle::-webkit-details-marker { display: none; }
+        .card-toggle::after {
+            content: '▶';
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: var(--muted);
+            transition: transform 0.2s;
+        }
+        details.card[open] > .card-toggle::after {
+            transform: translateY(-50%) rotate(90deg);
+        }
+
         /* Calendar */
         .calendar-nav {
             display: flex;
@@ -2132,11 +2153,11 @@ export class memoAdmin extends memoConfigure {
         </section>
 
         <section class="stack">
-            <article class="card">
-                <div class="card-header">
+            <details class="card" open>
+                <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.recentHistory', 'Recent history')}</h2>
                     <div class="card-caption">${t('memoAdmin.latest8Updated', 'Latest 8 updates')}</div>
-                </div>
+                </summary>
                 ${renderRecentFiles(stats.recentFiles, {
                     noDataLabel: t('memoAdmin.noData', 'No data'),
                     pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
@@ -2147,12 +2168,12 @@ export class memoAdmin extends memoConfigure {
                     updatedLabel: t('memoAdmin.updated', 'Updated'),
                     sizeLabel: t('memoAdmin.size', 'Size')
                 })}
-            </article>
-            <article class="card">
-                <div class="card-header">
+            </details>
+            <details class="card" open>
+                <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.calendar', 'Calendar')}</h2>
                     <div class="card-caption">${t('memoAdmin.calendarCaption', 'Memo activity by date')}</div>
-                </div>
+                </summary>
                 <div id="calendar-container">
                     <div class="calendar-nav">
                         <button class="calendar-nav-btn" id="cal-prev" type="button" title="${t('memoAdmin.calPrev', 'Previous')}">&#9664;</button>
@@ -2164,29 +2185,29 @@ export class memoAdmin extends memoConfigure {
                     </div>
                     <div class="calendar-grid" id="cal-grid"></div>
                 </div>
-            </article>
+            </details>
             ${stats.tagCounts.length > 0 ? `
-            <article class="card">
-                <div class="card-header">
+            <details class="card" open>
+                <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.tags', 'Tags')}</h2>
-                    <div class="card-caption">${t('memoAdmin.tagsCaption', 'Frontmatter tags across all memos')}</div>
-                </div>
+                    <div class="card-caption">${t('memoAdmin.tagsCaption', 'Frontmatter tags across all memos')} (${stats.tagCounts.length})</div>
+                </summary>
                 <div class="tag-cloud">
                     ${stats.tagCounts.map(({ tag, count }) =>
                         `<button class="tag-chip" data-search-tag="${escapeHtml(tag)}" title="${count} ${count === 1 ? 'memo' : 'memos'}">#${escapeHtml(tag)} <span class="tag-count">${count}</span></button>`
                     ).join('')}
                 </div>
-            </article>
+            </details>
             ` : ''}
             ${(() => {
                 const ss = memoAdmin.snippetProvider?.getStatus();
                 if (!ss) { return ''; }
                 return `
-            <article class="card">
-                <div class="card-header">
+            <details class="card" open>
+                <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.snippets', 'Snippets')}</h2>
                     <div class="card-caption">${t('memoAdmin.snippetsCaption', 'Custom completions for Markdown')}</div>
-                </div>
+                </summary>
                 <div class="snippet-status">
                     ${t('memoAdmin.snippetsDir', 'Directory')}: <code>${escapeHtml(ss.dir || '(not set)')}</code>
                     ${ss.exists ? `<span class="ok">&#10003;</span>` : `<span class="err">&#10007; ${t('memoAdmin.snippetsDirMissing', 'not found')}</span>`}
@@ -2204,13 +2225,57 @@ export class memoAdmin extends memoConfigure {
                     </tbody>
                 </table>
                 ` : `<div class="empty-state">${t('memoAdmin.snippetsEmpty', 'No snippets loaded. Place VS Code snippet JSON files in the snippets directory.')}</div>`}
-            </article>`;
+            </details>`;
             })()}
-            <article class="card">
-                <div class="card-header">
-                    <h2 class="card-title">${t('memoAdmin.pinnedMemos', 'Pinned memos')}</h2>
-                    <div class="card-caption">${t('memoAdmin.pinnedCaption', 'Fixed access')}</div>
+            ${(() => {
+                const templatesDir = this.memoTemplatesDir
+                    ? upath.normalize(this.memoTemplatesDir)
+                    : upath.normalize(upath.join(this.memodir, '.templates'));
+                const tplExists = fs.existsSync(templatesDir);
+                let tplFiles: Array<{ name: string; size: number }> = [];
+                if (tplExists) {
+                    try {
+                        tplFiles = fs.readdirSync(templatesDir)
+                            .filter(f => f.endsWith('.md'))
+                            .sort()
+                            .map(f => {
+                                try {
+                                    const s = fs.statSync(upath.join(templatesDir, f));
+                                    return { name: f, size: s.size };
+                                } catch { return { name: f, size: 0 }; }
+                            });
+                    } catch { /* ignore */ }
+                }
+                const defaultTpl = this.memotemplate;
+                return `
+            <details class="card" open>
+                <summary class="card-header card-toggle">
+                    <h2 class="card-title">${t('memoAdmin.templates', 'Templates')}</h2>
+                    <div class="card-caption">${t('memoAdmin.templatesCaption', 'Memo templates for new file creation')} (${tplFiles.length})</div>
+                </summary>
+                <div class="snippet-status">
+                    ${t('memoAdmin.templatesDir', 'Directory')}: <code>${escapeHtml(templatesDir)}</code>
+                    ${tplExists ? `<span class="ok">&#10003;</span>` : `<span class="err">&#10007; ${t('memoAdmin.templatesDirMissing', 'not found')}</span>`}
+                    ${defaultTpl ? `&nbsp;|&nbsp; ${t('memoAdmin.defaultTemplate', 'Default')}: <code>${escapeHtml(upath.basename(defaultTpl))}</code>` : ''}
                 </div>
+                ${tplFiles.length > 0 ? `
+                <table class="snippet-table">
+                    <thead><tr>
+                        <th>${t('memoAdmin.templateFile', 'File')}</th>
+                        <th>${t('memoAdmin.templateSize', 'Size')}</th>
+                    </tr></thead>
+                    <tbody>
+                        ${tplFiles.map(f => `<tr><td><code>${escapeHtml(f.name)}</code></td><td>${f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B'}</td></tr>`).join('')}
+                    </tbody>
+                </table>
+                ` : `<div class="empty-state">${t('memoAdmin.templatesEmpty', 'No templates found. Place .md files in the templates directory.')}</div>`}
+            </details>`;
+            })()}
+            <details class="card" open>
+                <summary class="card-header card-toggle">
+                    <h2 class="card-title">${t('memoAdmin.pinnedMemos', 'Pinned memos')}</h2>
+                    <div class="card-caption">${t('memoAdmin.pinnedCaption', 'Fixed access')} (${stats.pinnedFiles.length})</div>
+                </summary>
                 ${stats.pinnedFiles.length > 0 ? renderRecentFiles(stats.pinnedFiles, {
                     noDataLabel: t('memoAdmin.noData', 'No data'),
                     pinnedFilenames: stats.pinnedFiles.map((item) => item.filename),
@@ -2220,7 +2285,7 @@ export class memoAdmin extends memoConfigure {
                     updatedLabel: t('memoAdmin.updated', 'Updated'),
                     sizeLabel: t('memoAdmin.size', 'Size')
                 }) : `<div class="empty-state">${t('memoAdmin.pinnedEmpty', 'No pinned memos. Use the pin button in Recent history to add.')}</div>`}
-            </article>
+            </details>
             <details class="detail-block">
                 <summary>
                     <span class="summary-label">
@@ -2796,7 +2861,15 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.snippetsLoaded': '\u8aad\u307f\u8fbc\u307f\u6e08\u307f',
     'memoAdmin.snippetName': '\u540d\u524d',
     'memoAdmin.snippetDesc': '\u8aac\u660e',
-    'memoAdmin.snippetsEmpty': '\u30b9\u30cb\u30da\u30c3\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u30b9\u30cb\u30da\u30c3\u30c8\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u306b VS Code \u30b9\u30cb\u30da\u30c3\u30c8 JSON \u30d5\u30a1\u30a4\u30eb\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
+    'memoAdmin.snippetsEmpty': '\u30b9\u30cb\u30da\u30c3\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u30b9\u30cb\u30da\u30c3\u30c8\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u306b VS Code \u30b9\u30cb\u30da\u30c3\u30c8 JSON \u30d5\u30a1\u30a4\u30eb\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    'memoAdmin.templates': '\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8',
+    'memoAdmin.templatesCaption': '\u65b0\u898f\u30e1\u30e2\u4f5c\u6210\u7528\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8',
+    'memoAdmin.templatesDir': '\u30c7\u30a3\u30ec\u30af\u30c8\u30ea',
+    'memoAdmin.templatesDirMissing': '\u898b\u3064\u304b\u308a\u307e\u305b\u3093',
+    'memoAdmin.defaultTemplate': '\u30c7\u30d5\u30a9\u30eb\u30c8',
+    'memoAdmin.templateFile': '\u30d5\u30a1\u30a4\u30eb',
+    'memoAdmin.templateSize': '\u30b5\u30a4\u30ba',
+    'memoAdmin.templatesEmpty': '\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u306b .md \u30d5\u30a1\u30a4\u30eb\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
 };
 
 const JA_TIPS: string[] = [

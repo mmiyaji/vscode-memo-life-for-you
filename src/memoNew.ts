@@ -242,7 +242,7 @@ export class memoNew extends memoConfigure  {
     private async pickTemplate(): Promise<string | undefined> {
         const templatesDir = this.memoTemplatesDir
             ? upath.normalize(this.memoTemplatesDir)
-            : upath.normalize(upath.join(this.memoconfdir, '.templates'));
+            : upath.normalize(upath.join(this.memodir, '.templates'));
         if (!fs.existsSync(templatesDir)) {
             return undefined;
         }

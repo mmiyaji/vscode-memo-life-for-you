@@ -344,7 +344,7 @@ export class MemoIndex {
                 result.title = data.title;
             }
             if (Array.isArray(data.tags)) {
-                result.tags = data.tags.filter((t: unknown) => typeof t === 'string' && t);
+                result.tags = [...new Set(data.tags.filter((t: unknown) => typeof t === 'string' && t) as string[])];
             }
             return result;
         } catch {
