@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as upath from 'upath';
 import matter = require('gray-matter');
+import { MEMO_META_DIR_DEFAULT } from './memoConfigure';
 
 export type FileMeta = {
     birthtime: number;
@@ -15,9 +16,10 @@ export type FileMeta = {
 };
 
 type IndexData = {
-    version: 1 | 2;
+    version: 1 | 2 | 3;
     memodir: string;
     entries: Record<string, FileMeta>;
+    pinnedFiles?: string[];
 };
 
 type LoadResult = {
@@ -28,6 +30,7 @@ export class MemoIndex {
     private static instance: MemoIndex | undefined;
 
     private entries = new Map<string, FileMeta>();
+    private pinnedFiles: string[] = [];
     private dirty = false;
     private needsFrontmatterScan = false;
     private debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -38,14 +41,15 @@ export class MemoIndex {
 
     constructor(
         private readonly memodir: string,
-        private readonly extnames: Set<string>
+        private readonly extnames: Set<string>,
+        metaDir: string = MEMO_META_DIR_DEFAULT
     ) {
-        this.primaryPath = upath.join(memodir, '.memo-index.json');
-        this.backupPath = upath.join(memodir, '.memo-index.json.bak');
+        this.primaryPath = upath.join(memodir, metaDir, 'index.json');
+        this.backupPath = upath.join(memodir, metaDir, 'index.json.bak');
     }
 
-    static async create(memodir: string, extnames: string[]): Promise<MemoIndex> {
-        const index = new MemoIndex(memodir, new Set(extnames));
+    static async create(memodir: string, extnames: string[], metaDir?: string): Promise<MemoIndex> {
+        const index = new MemoIndex(memodir, new Set(extnames), metaDir);
         await index.load();
         await index.sync();
         MemoIndex.instance = index;
@@ -61,11 +65,11 @@ export class MemoIndex {
     }
 
     async load(): Promise<LoadResult> {
-        const readOne = async (filePath: string): Promise<{ map: Map<string, FileMeta>; version: number } | undefined> => {
+        const readOne = async (filePath: string): Promise<{ map: Map<string, FileMeta>; version: number; pinned: string[] } | undefined> => {
             try {
                 const raw = await fsp.readFile(filePath, 'utf8');
                 const data = JSON.parse(raw) as Partial<IndexData>;
-                if ((data.version !== 1 && data.version !== 2) || typeof data.entries !== 'object' || data.entries === null) {
+                if ((data.version !== 1 && data.version !== 2 && data.version !== 3) || typeof data.entries !== 'object' || data.entries === null) {
                     return undefined;
                 }
                 const map = new Map<string, FileMeta>();
@@ -74,7 +78,8 @@ export class MemoIndex {
                         map.set(key, meta);
                     }
                 }
-                return { map, version: data.version };
+                const pinned = Array.isArray(data.pinnedFiles) ? data.pinnedFiles.filter((p): p is string => typeof p === 'string' && !!p) : [];
+                return { map, version: data.version, pinned };
             } catch (error: unknown) {
                 const nodeError = error as NodeJS.ErrnoException;
                 if (nodeError?.code === 'ENOENT') {
@@ -87,9 +92,13 @@ export class MemoIndex {
         const primary = await readOne(this.primaryPath);
         if (primary) {
             this.entries = primary.map;
+            this.pinnedFiles = primary.pinned;
             if (primary.version < 2) {
                 this.dirty = true;
                 this.needsFrontmatterScan = true;
+            }
+            if (primary.version < 3) {
+                this.dirty = true;
             }
             return { status: 'ok' };
         }
@@ -97,6 +106,7 @@ export class MemoIndex {
         const backup = await readOne(this.backupPath);
         if (backup) {
             this.entries = backup.map;
+            this.pinnedFiles = backup.pinned;
             this.dirty = true;
             return { status: 'backup' };
         }
@@ -110,9 +120,10 @@ export class MemoIndex {
     async save(): Promise<void> {
         this.savePromise = this.savePromise.then(async () => {
             const data: IndexData = {
-                version: 2,
+                version: 3,
                 memodir: this.memodir,
                 entries: Object.fromEntries(this.entries),
+                ...(this.pinnedFiles.length > 0 ? { pinnedFiles: this.pinnedFiles } : {}),
             };
             const json = JSON.stringify(data, null, 2);
             await writeFileSafely(this.primaryPath, json, 'utf8');
@@ -389,6 +400,16 @@ export class MemoIndex {
             }
         }
         return Array.from(tags).sort();
+    }
+
+    getPinnedFiles(): string[] {
+        return [...this.pinnedFiles];
+    }
+
+    setPinnedFiles(files: string[]): void {
+        this.pinnedFiles = files.filter((f, i, arr) => !!f && arr.indexOf(f) === i);
+        this.dirty = true;
+        this.scheduleSave();
     }
 
     private readFilesRecursively(dir: string, result: Set<string>): void {

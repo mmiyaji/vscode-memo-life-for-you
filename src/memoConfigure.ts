@@ -17,6 +17,12 @@ export interface items extends vscode.QuickPickItem {
     mtime: Date;
 }
 
+/** Default name of the hidden metadata directory inside memodir */
+export const MEMO_META_DIR_DEFAULT = '.memo';
+
+/** Built-in default template content (Mustache format) */
+export const BUILTIN_TEMPLATE_CONTENT = '# {{.Date}} {{.Title}}\n\n';
+
 export class memoConfigure {
     public _onDidChange = new vscode.EventEmitter<vscode.Uri>();
     public _waiting: boolean;
@@ -54,9 +60,12 @@ export class memoConfigure {
     public memoAdminColorTheme: string;
     public memoDisplayLanguage: string;
     public memoAdminUseGradient: boolean;
+    public memoAdminAdvancedMode: boolean;
     public memoAdminOpenMode: string;
     public memoAdminOpenOnStartup: boolean;
     public memoPinnedFiles: string[];
+    public memoRecentCount: number;
+    public memoMetaDir: string;
     public openMarkdownPreviewUseMPE: boolean;
     public memoOpenChromeCustomizeURL: string;
     public memoTyporaExecPath: string;
@@ -78,41 +87,12 @@ export class memoConfigure {
         this.setMemoConfDir();
         this.applyMemoConfDirSetting();
         this.updateConfiguration();
-        this.safeReadConfig();
-        this.applyVscodeOverrides();
         this._waiting = false;
 
         vscode.workspace.onDidChangeConfiguration(() => {
             this.applyMemoConfDirSetting();
             this.updateConfiguration();
-            this.safeReadConfig();
-            this.applyVscodeOverrides();
         });
-
-        fs.watchFile(upath.normalize(upath.join(this.memoconfdir, 'config.toml')), () => {
-            this.safeReadConfig();
-            this.applyVscodeOverrides();
-        });
-    }
-
-    /**
-     * VS Code settings override config.toml values.
-     * If a VS Code setting is non-empty, it takes priority.
-     */
-    private applyVscodeOverrides() {
-        const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
-        const vsMemodir = cfg.get<string>('memodir');
-        if (vsMemodir && vsMemodir.trim() !== '') {
-            this.memodir = upath.normalizeTrim(vsMemodir.trim());
-        }
-        const vsMemotemplate = cfg.get<string>('memotemplate');
-        if (vsMemotemplate && vsMemotemplate.trim() !== '') {
-            this.memotemplate = upath.normalizeTrim(vsMemotemplate.trim());
-        }
-        const vsDatePathFormat = cfg.get<string>('memoDatePathFormat');
-        if (vsDatePathFormat && vsDatePathFormat.trim() !== '') {
-            this.memoDatePathFormat = vsDatePathFormat.trim();
-        }
     }
 
     public setMemoConfDir() {
@@ -135,41 +115,9 @@ export class memoConfigure {
         }
     }
 
-    public readConfig() {
-        const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
-        const list = fs.readFileSync(configPath, 'utf8').split('\n');
-
-        list.forEach((line) => {
-            const array = line.split("=").map((value) => value.replace(/"/g, "").trim());
-
-            if (array[0]?.match(/^memodir$/) && array[1]?.trim()) {
-                this.memodir = upath.normalizeTrim(array[1]);
-            }
-
-            if (array[0]?.match(/^memotemplate$/) && array[1]?.trim()) {
-                this.memotemplate = (upath.normalizeTrim(array[1]) === upath.normalizeTrim(".")) ? "" : upath.normalizeTrim(array[1]);
-            }
-
-            if (array[0]?.match(/^memoDatePathFormat$/) && array[1]?.trim()) {
-                this.memoDatePathFormat = array[1].trim();
-            }
-        });
-
-        return void 0;
-    }
-
-    protected safeReadConfig() {
-        const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
-        if (!fs.existsSync(configPath)) {
-            return;
-        }
-
-        this.readConfig();
-    }
-
     public checkMemoDir() {
         if (!this.memodir) {
-            vscode.window.showErrorMessage(localize('memodirCheck', 'memodir is not set in config.toml'));
+            vscode.window.showErrorMessage(localize('memodirCheck', 'memodir is not set. Configure it in VS Code settings.'));
             return;
         }
 
@@ -182,6 +130,11 @@ export class memoConfigure {
     }
 
     public updateConfiguration() {
+        const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+        this.memodir = upath.normalizeTrim((cfg.get<string>('memodir') || '').trim());
+        const rawTemplate = (cfg.get<string>('memotemplate') || '').trim();
+        this.memotemplate = rawTemplate ? upath.normalizeTrim(rawTemplate) : '';
+        this.memoDatePathFormat = (cfg.get<string>('memoDatePathFormat') || '').trim();
         this.memopath = upath.normalize(vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoPath'));
         this.memoaddr = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('serve-addr');
         this.memoTitlePrefix = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('titlePrefix');
@@ -212,9 +165,12 @@ export class memoConfigure {
         this.memoAdminColorTheme = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminColorTheme');
         this.memoDisplayLanguage = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoDisplayLanguage');
         this.memoAdminUseGradient = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminUseGradient');
+        this.memoAdminAdvancedMode = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminAdvancedMode');
         this.memoAdminOpenMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminOpenMode');
         this.memoAdminOpenOnStartup = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminOpenOnStartup');
         this.memoPinnedFiles = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('memoPinnedFiles');
+        this.memoRecentCount = vscode.workspace.getConfiguration('memo-life-for-you').get<number>('memoRecentCount', 8);
+        this.memoMetaDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoMetaDir', MEMO_META_DIR_DEFAULT) || MEMO_META_DIR_DEFAULT;
         this.openMarkdownPreviewUseMPE = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openMarkdownPreviewUseMPE');
         this.memoOpenChromeCustomizeURL = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('openChromeCustomizeURL');
         this.memoTyporaExecPath = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('TyporaExecPath');
@@ -222,32 +178,30 @@ export class memoConfigure {
         this.memoListDisplayExtname = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('listDisplayExtname');
     }
 
-    public updateTomlConfig(values: Record<string, string>) {
-        const configPath = upath.normalize(upath.join(this.memoconfdir, "config.toml"));
-        let content = fs.readFileSync(configPath, 'utf8');
-
-        for (const [key, rawValue] of Object.entries(values)) {
-            const escapedValue = rawValue.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            const line = `${key} = "${escapedValue}"`;
-            const pattern = new RegExp(`^${key}\\s*=.*$`, 'm');
-
-            if (pattern.test(content)) {
-                content = content.replace(pattern, line);
-            } else {
-                content += `${content.endsWith('\n') ? '' : '\n'}${line}\n`;
+    /**
+     * Resolve the effective default template path.
+     * If memotemplate is explicitly set, use it.
+     * Otherwise fall back to .memo/templates/default.md (if it exists),
+     * then to BUILTIN_TEMPLATE_CONTENT.
+     */
+    public resolveDefaultTemplatePath(): string {
+        if (this.memotemplate) {
+            return this.memotemplate;
+        }
+        if (this.memodir) {
+            const defaultPath = upath.normalize(upath.join(this.memodir, this.memoMetaDir, 'templates', 'default.md'));
+            if (fs.existsSync(defaultPath)) {
+                return defaultPath;
             }
         }
-
-        fs.writeFileSync(configPath, content, 'utf8');
-        this.safeReadConfig();
+        return '';
     }
 
     public ensureBuiltInTemplateFile(): string {
         const templatePath = upath.normalize(upath.join(this.memoconfdir, 'builtin-template.md'));
-        const content = '# {{.Date}} {{.Title}}\n\n';
 
-        if (!fs.existsSync(templatePath) || fs.readFileSync(templatePath, 'utf8') !== content) {
-            fs.writeFileSync(templatePath, content, 'utf8');
+        if (!fs.existsSync(templatePath) || fs.readFileSync(templatePath, 'utf8') !== BUILTIN_TEMPLATE_CONTENT) {
+            fs.writeFileSync(templatePath, BUILTIN_TEMPLATE_CONTENT, 'utf8');
         }
 
         return templatePath;

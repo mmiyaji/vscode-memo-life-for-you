@@ -18,7 +18,7 @@ export class memoOpenTypora extends memoConfigure {
      * OpenTypora
      */
     public OpenTypora() {
-        this.readConfig();
+        this.updateConfiguration();
         // memopath に設定されたコマンドが実行可能かチェック
         console.log(this.memopath);
 

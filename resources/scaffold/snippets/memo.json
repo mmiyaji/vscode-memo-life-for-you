@@ -1,0 +1,127 @@
+{
+  "Insert date": {
+    "prefix": "insert date",
+    "body": [
+      "$CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE"
+    ],
+    "description": "Insert current date"
+  },
+  "Insert time": {
+    "prefix": "insert time",
+    "body": [
+      "$CURRENT_HOUR:$CURRENT_MINUTE"
+    ],
+    "description": "Insert current time"
+  },
+  "Section": {
+    "prefix": "section",
+    "body": [
+      "## $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE $CURRENT_HOUR:$CURRENT_MINUTE ${1:title}",
+      "",
+      "${2:}",
+      ""
+    ],
+    "description": "Insert a date section heading"
+  },
+  "Task list": {
+    "prefix": "task",
+    "body": [
+      "## Tasks",
+      "",
+      "- [ ] ${1:task}",
+      "- [ ] ${2:task}",
+      "- [ ] ${3:task}",
+      ""
+    ],
+    "description": "Insert a task checklist"
+  },
+  "Code block": {
+    "prefix": "codeblock",
+    "body": [
+      "```${1:language}",
+      "${2:code}",
+      "```",
+      ""
+    ],
+    "description": "Insert a fenced code block"
+  },
+  "Table": {
+    "prefix": "table",
+    "body": [
+      "| ${1:Header1} | ${2:Header2} | ${3:Header3} |",
+      "|---|---|---|",
+      "| ${4:cell} | ${5:cell} | ${6:cell} |",
+      ""
+    ],
+    "description": "Insert a markdown table"
+  },
+  "Note": {
+    "prefix": "note-note",
+    "body": [
+      "> [!NOTE]",
+      "> ${1:text}",
+      ""
+    ],
+    "description": "Insert a NOTE callout"
+  },
+  "Tip": {
+    "prefix": "note-tip",
+    "body": [
+      "> [!TIP]",
+      "> ${1:text}",
+      ""
+    ],
+    "description": "Insert a TIP callout"
+  },
+  "Warning": {
+    "prefix": "note-warning",
+    "body": [
+      "> [!WARNING]",
+      "> ${1:text}",
+      ""
+    ],
+    "description": "Insert a WARNING callout"
+  },
+  "Important": {
+    "prefix": "note-important",
+    "body": [
+      "> [!IMPORTANT]",
+      "> ${1:text}",
+      ""
+    ],
+    "description": "Insert an IMPORTANT callout"
+  },
+  "Caution": {
+    "prefix": "note-caution",
+    "body": [
+      "> [!CAUTION]",
+      "> ${1:text}",
+      ""
+    ],
+    "description": "Insert a CAUTION callout"
+  },
+  "Details": {
+    "prefix": "details",
+    "body": [
+      "<details>",
+      "<summary>${1:summary}</summary>",
+      "",
+      "${2:content}",
+      "",
+      "</details>",
+      ""
+    ],
+    "description": "Insert a collapsible details block"
+  },
+  "Frontmatter": {
+    "prefix": "frontmatter",
+    "body": [
+      "---",
+      "date: $CURRENT_YEAR-$CURRENT_MONTH-$CURRENT_DATE",
+      "tags: [${1:tag}]",
+      "---",
+      ""
+    ],
+    "description": "Insert YAML frontmatter"
+  }
+}

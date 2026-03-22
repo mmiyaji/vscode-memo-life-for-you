@@ -65,7 +65,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoQA", () => memoQA()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoSuggestTemplate", () => {
         const cfg = new memoConfigure();
-        const templatesDir = cfg.memoTemplatesDir || upath.join(cfg.memodir, '.templates');
+        const templatesDir = cfg.memoTemplatesDir || upath.join(cfg.memodir, cfg.memoMetaDir, 'templates');
         memoSuggestTemplate(templatesDir);
     }));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoGenerateTitle", () => memoGenerateTitle()));
@@ -97,7 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (snippetConfig.memoSnippetsDir && snippetConfig.memoSnippetsDir.trim() !== '') {
             return snippetConfig.memoSnippetsDir.trim();
         }
-        return snippetConfig.memodir ? upath.join(snippetConfig.memodir, '.snippets') : '';
+        return snippetConfig.memodir ? upath.join(snippetConfig.memodir, snippetConfig.memoMetaDir, 'snippets') : '';
     });
     context.subscriptions.push(
         vscode.languages.registerCompletionItemProvider(
@@ -118,24 +118,19 @@ export function activate(context: vscode.ExtensionContext) {
     void restorePendingMemoAdmin(context, memoadmin);
     void openMemoAdminOnStartup(context, memoadmin);
 
-    // First-launch setup notification
+    // First-launch: auto-open Admin with welcome carousel
     {
-        const cfg = new memoConfigure();
-        const hasMemoDir = cfg.memodir && cfg.memodir.trim() !== '' && fs.existsSync(cfg.memodir);
-        if (!hasMemoDir) {
-            const adminLabel = nls.loadMessageBundle()('memoSetup.openAdmin', 'Open Admin');
-            const configLabel = nls.loadMessageBundle()('memoSetup.openConfig', 'Open config');
-            vscode.window.showInformationMessage(
-                nls.loadMessageBundle()('memoSetup.message', 'Memo: Set a memo directory to get started.'),
-                adminLabel,
-                configLabel
-            ).then(choice => {
-                if (choice === adminLabel) {
-                    vscode.commands.executeCommand('extension.memoAdmin');
-                } else if (choice === configLabel) {
-                    vscode.commands.executeCommand('extension.memoConfig');
-                }
-            });
+        const setupComplete = context.globalState.get<boolean>('memo.setupComplete', false);
+        if (!setupComplete) {
+            const cfg = new memoConfigure();
+            const hasMemoDir = cfg.memodir && cfg.memodir.trim() !== '' && cfg.memodir !== '.' && fs.existsSync(cfg.memodir);
+            if (!hasMemoDir) {
+                setTimeout(() => {
+                    void memoadmin.Show(context);
+                }, 500);
+            }
+            // Mark setup as complete regardless — only auto-open once
+            void context.globalState.update('memo.setupComplete', true);
         }
     }
 

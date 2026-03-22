@@ -2,6 +2,7 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as upath from 'upath';
 import * as dateFns from 'date-fns';
 import * as nls from 'vscode-nls';
@@ -36,6 +37,8 @@ export class memoAdmin extends memoConfigure {
     private static openingPanelPromise: Promise<void> | undefined;
     private static statsCache: MemoStatsCache | undefined;
     private static memoIndex: MemoIndex | undefined;
+    private static suppressConfigRender = false;
+    private static extensionPath = '';
     private static indexDisposable: vscode.Disposable | undefined;
     private static snippetProvider: MemoSnippetProvider | undefined;
 
@@ -48,14 +51,27 @@ export class memoAdmin extends memoConfigure {
     }
 
     public async initializeIndex(context: vscode.ExtensionContext): Promise<void> {
-        this.safeReadConfig();
-        if (!this.memodir || !fs.existsSync(this.memodir)) {
+        memoAdmin.extensionPath = context.extensionPath;
+        this.updateConfiguration();
+        if (!this.memodir || this.memodir === '.' || !fs.existsSync(this.memodir)) {
             return;
         }
+        this.scaffoldMemoFolders(this.memodir);
         await memoAdmin.disposeIndex();
-        memoAdmin.memoIndex = await MemoIndex.create(this.memodir, this.memoListDisplayExtname);
+        memoAdmin.memoIndex = await MemoIndex.create(this.memodir, this.memoListDisplayExtname, this.memoMetaDir);
         memoAdmin.indexDisposable = memoAdmin.memoIndex.startWatching();
         context.subscriptions.push(memoAdmin.indexDisposable);
+
+        // Migrate pinned files from settings.json to index
+        const legacyPinned = this.memoPinnedFiles;
+        if (legacyPinned && legacyPinned.length > 0 && memoAdmin.memoIndex.getPinnedFiles().length === 0) {
+            memoAdmin.memoIndex.setPinnedFiles(legacyPinned.map(f => upath.normalizeTrim(f)).filter(Boolean));
+            // Clear legacy setting
+            const target = (vscode.workspace.workspaceFolders?.length ?? 0) > 0
+                ? vscode.ConfigurationTarget.Workspace
+                : vscode.ConfigurationTarget.Global;
+            await vscode.workspace.getConfiguration('memo-life-for-you').update('memoPinnedFiles', undefined, target);
+        }
     }
 
     public static async flushIndex(): Promise<void> {
@@ -77,6 +93,7 @@ export class memoAdmin extends memoConfigure {
     }
 
     public async Show(context: vscode.ExtensionContext) {
+        memoAdmin.extensionPath = context.extensionPath;
         if (memoAdmin.currentPanel) {
             memoAdmin.currentPanel.reveal(vscode.ViewColumn.One);
             this.renderPanel(memoAdmin.currentPanel, context);
@@ -92,7 +109,7 @@ export class memoAdmin extends memoConfigure {
             return;
         }
 
-        this.safeReadConfig();
+        this.updateConfiguration();
 
         memoAdmin.openingPanelPromise = (async () => {
             if (memoAdmin.currentPanel) {
@@ -124,6 +141,9 @@ export class memoAdmin extends memoConfigure {
                         break;
                     case 'newMemo':
                         await vscode.commands.executeCommand('extension.memoNew');
+                        break;
+                    case 'quickMemo':
+                        await vscode.commands.executeCommand('extension.memoQuick');
                         break;
                     case 'searchMemo':
                         await vscode.commands.executeCommand('extension.memoGrep');
@@ -206,7 +226,7 @@ export class memoAdmin extends memoConfigure {
 
                         const documentsDir = upath.normalize(upath.join(process.env.USERPROFILE || process.env.HOME || '', 'Documents'));
                         const selectedUri = await vscode.window.showSaveDialog({
-                            defaultUri: vscode.Uri.file(upath.join(documentsDir, 'Memo Admin.code-workspace')),
+                            defaultUri: vscode.Uri.file(upath.join(documentsDir, 'Memo.code-workspace')),
                             filters: {
                                 'VS Code Workspace': ['code-workspace']
                             },
@@ -232,8 +252,8 @@ export class memoAdmin extends memoConfigure {
                             settings: {
                                 'memo-life-for-you.memoAdminOpenOnStartup': true,
                                 'memo-life-for-you.memoAdminOpenMode': 'currentWindow',
-                                'memo-life-for-you.memoTemplatesDir': upath.join(this.memodir, '.templates'),
-                                'memo-life-for-you.memoSnippetsDir': upath.join(this.memodir, '.snippets'),
+                                'memo-life-for-you.memoTemplatesDir': upath.join(this.memodir, this.memoMetaDir, 'templates'),
+                                'memo-life-for-you.memoSnippetsDir': upath.join(this.memodir, this.memoMetaDir, 'snippets'),
                                 'markdown.copyFiles.destination': {
                                     '*': 'assets/${isoTime/^(\\d+)-(\\d+)-(\\d+)T(\\d+):(\\d+):(\\d+).+/$1$2$3-$4$5$6/}.${fileExtName}'
                                 },
@@ -258,26 +278,24 @@ export class memoAdmin extends memoConfigure {
                         vscode.window.showInformationMessage(localize('memoAdmin.workspaceCreated', 'Created workspace file: {0}', workspacePath));
                         break;
                     }
-                    case 'saveCoreSettings':
+                    case 'saveCoreSettings': {
                         if (!message.memodir || !fs.existsSync(message.memodir)) {
                             vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
                             return;
                         }
 
-                        if (message.memotemplate && message.memotemplate !== "" && !fs.existsSync(message.memotemplate)) {
-                            vscode.window.showErrorMessage(localize('memoAdmin.invalidTemplate', 'The selected template file does not exist'));
-                            return;
+                        const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+                        await cfg.update('memodir', message.memodir, vscode.ConfigurationTarget.Global);
+                        if (message.memoDatePathFormat) {
+                            await cfg.update('memoDatePathFormat', message.memoDatePathFormat, vscode.ConfigurationTarget.Global);
                         }
-
-                        this.updateTomlConfig({
-                            memodir: message.memodir ?? this.memodir,
-                            memotemplate: message.memotemplate ?? this.memotemplate ?? "",
-                            memoDatePathFormat: message.memoDatePathFormat ?? this.memoDatePathFormat ?? "yyyy/MM"
-                        });
+                        this.updateConfiguration();
+                        this.scaffoldMemoFolders(message.memodir);
                         await this.revealMemoRootInExplorer();
                         this.renderPanel(panel, context);
                         vscode.window.showInformationMessage(localize('memoAdmin.saved', 'Memo settings updated'));
                         break;
+                    }
                     case 'pickMemoDir': {
                         const picked = await vscode.window.showOpenDialog({
                             canSelectFiles: false,
@@ -287,21 +305,137 @@ export class memoAdmin extends memoConfigure {
                             openLabel: localize('memoAdmin.pickMemoDir', 'Select memo root')
                         });
                         if (picked?.[0]) {
-                            panel.webview.postMessage({ command: 'setMemoDir', value: picked[0].fsPath });
+                            const dirPath = picked[0].fsPath;
+                            // Suppress re-render during carousel to keep overlay visible
+                            memoAdmin.suppressConfigRender = true;
+                            const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+                            await cfg.update('memodir', dirPath, vscode.ConfigurationTarget.Global);
+                            this.updateConfiguration();
+                            this.scaffoldMemoFolders(dirPath);
+                            memoAdmin.suppressConfigRender = false;
+                            panel.webview.postMessage({ command: 'setMemoDir', value: dirPath });
+                            panel.webview.postMessage({ command: 'memoDirSet' });
                         }
                         break;
                     }
-                    case 'pickTemplateFile': {
-                        const effectiveTemplatePath = this.memotemplate || this.ensureBuiltInTemplateFile();
+                    case 'finishWelcome':
+                    case 'setDefaultMemoDir': {
+                        // Set default memodir if not yet configured
+                        if (!this.memodir || this.memodir === '.') {
+                            let defaultDir: string;
+                            if (process.platform === 'win32') {
+                                defaultDir = upath.join(os.homedir(), 'Documents', 'memo');
+                            } else if (process.platform === 'darwin') {
+                                defaultDir = upath.join(os.homedir(), 'Documents', 'memo');
+                            } else {
+                                defaultDir = upath.join(os.homedir(), 'memo');
+                            }
+                            // Create memo directory and scaffold templates/snippets
+                            if (!fs.existsSync(defaultDir)) {
+                                fs.mkdirSync(defaultDir, { recursive: true });
+                            }
+                            this.scaffoldMemoFolders(defaultDir);
+
+                            // Generate workspace file inside memodir
+                            const workspacePath = upath.join(defaultDir, 'Memo.code-workspace');
+                            if (!fs.existsSync(workspacePath)) {
+                                const workspaceContent = JSON.stringify({
+                                    folders: [
+                                        { path: '.', name: 'MEMO' }
+                                    ],
+                                    settings: {
+                                        'memo-life-for-you.memoAdminOpenOnStartup': true,
+                                        'memo-life-for-you.memoAdminOpenMode': 'currentWindow',
+                                        'memo-life-for-you.memoTemplatesDir': upath.join(defaultDir, this.memoMetaDir, 'templates'),
+                                        'memo-life-for-you.memoSnippetsDir': upath.join(defaultDir, this.memoMetaDir, 'snippets'),
+                                        'markdown.copyFiles.destination': {
+                                            '*': 'assets/${isoTime/^(\\d+)-(\\d+)-(\\d+)T(\\d+):(\\d+):(\\d+).+/$1$2$3-$4$5$6/}.${fileExtName}'
+                                        },
+                                        'workbench.colorCustomizations': this.getWorkspaceColorCustomizations()
+                                    },
+                                    extensions: {
+                                        recommendations: [
+                                            'mmiyaji.memo-life-for-you-admin',
+                                            'yzhang.markdown-all-in-one',
+                                            'mmiyaji.vscode-undotree'
+                                        ]
+                                    }
+                                }, null, 2);
+                                fs.writeFileSync(workspacePath, `${workspaceContent}\n`, 'utf8');
+                            }
+
+                            const cfgW = vscode.workspace.getConfiguration('memo-life-for-you');
+                            await cfgW.update('memodir', defaultDir, vscode.ConfigurationTarget.Global);
+                        }
+
+                        // Always refresh and re-render after welcome finishes
+                        this.updateConfiguration();
+                        await this.initializeIndex(context);
+                        this.renderPanel(panel, context);
+
+                        // Offer to open workspace if it exists
+                        if (this.memodir && fs.existsSync(this.memodir)) {
+                            const workspacePath = upath.join(this.memodir, 'Memo.code-workspace');
+                            if (fs.existsSync(workspacePath)) {
+                                const openLabel = localize('memoAdmin.openWorkspace', 'Open workspace');
+                                const laterLabel = localize('memoAdmin.later', 'Later');
+                                const choice = await vscode.window.showInformationMessage(
+                                    localize('memoAdmin.openWorkspacePrompt', 'Memo folder is ready at {0}. Open the workspace in a new window?', this.memodir),
+                                    openLabel,
+                                    laterLabel
+                                );
+                                if (choice === openLabel) {
+                                    await vscode.commands.executeCommand('vscode.openFolder',
+                                        vscode.Uri.file(workspacePath),
+                                        { forceNewWindow: true }
+                                    );
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    case 'pickTemplatesDir': {
+                        const currentTplDir = this.memoTemplatesDir
+                            ? upath.normalize(this.memoTemplatesDir)
+                            : (this.memodir ? upath.normalize(upath.join(this.memodir, this.memoMetaDir, 'templates')) : undefined);
                         const picked = await vscode.window.showOpenDialog({
-                            canSelectFiles: true,
-                            canSelectFolders: false,
+                            canSelectFiles: false,
+                            canSelectFolders: true,
                             canSelectMany: false,
-                            defaultUri: effectiveTemplatePath && fs.existsSync(effectiveTemplatePath) ? vscode.Uri.file(effectiveTemplatePath) : undefined,
-                            openLabel: localize('memoAdmin.pickTemplateFile', 'Select template file')
+                            defaultUri: currentTplDir && fs.existsSync(currentTplDir) ? vscode.Uri.file(currentTplDir) : undefined,
+                            openLabel: localize('memoAdmin.pickTemplatesDir', 'Select templates folder')
                         });
                         if (picked?.[0]) {
-                            panel.webview.postMessage({ command: 'setTemplateFile', value: picked[0].fsPath });
+                            await vscode.workspace.getConfiguration('memo-life-for-you').update('memoTemplatesDir', picked[0].fsPath, vscode.ConfigurationTarget.Global);
+                            this.updateConfiguration();
+                            this.renderPanel(panel, context);
+                        }
+                        break;
+                    }
+                    case 'pickSnippetsDir': {
+                        const currentSnpDir = this.memoSnippetsDir
+                            ? upath.normalize(this.memoSnippetsDir)
+                            : (this.memodir ? upath.normalize(upath.join(this.memodir, this.memoMetaDir, 'snippets')) : undefined);
+                        const picked = await vscode.window.showOpenDialog({
+                            canSelectFiles: false,
+                            canSelectFolders: true,
+                            canSelectMany: false,
+                            defaultUri: currentSnpDir && fs.existsSync(currentSnpDir) ? vscode.Uri.file(currentSnpDir) : undefined,
+                            openLabel: localize('memoAdmin.pickSnippetsDir', 'Select snippets folder')
+                        });
+                        if (picked?.[0]) {
+                            await vscode.workspace.getConfiguration('memo-life-for-you').update('memoSnippetsDir', picked[0].fsPath, vscode.ConfigurationTarget.Global);
+                            this.updateConfiguration();
+                            this.renderPanel(panel, context);
+                        }
+                        break;
+                    }
+                    case 'setDefaultTemplate': {
+                        if (message.templatePath && fs.existsSync(message.templatePath)) {
+                            await vscode.workspace.getConfiguration('memo-life-for-you').update('memotemplate', message.templatePath, vscode.ConfigurationTarget.Global);
+                            this.updateConfiguration();
+                            this.renderPanel(panel, context);
+                            vscode.window.showInformationMessage(localize('memoAdmin.defaultTemplateSet', 'Default template set to: {0}', upath.basename(message.templatePath)));
                         }
                         break;
                     }
@@ -372,7 +506,7 @@ export class memoAdmin extends memoConfigure {
             });
 
             const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
-                if (event.affectsConfiguration('memo-life-for-you')) {
+                if (event.affectsConfiguration('memo-life-for-you') && !memoAdmin.suppressConfigRender) {
                     this.renderPanel(panel, context);
                 }
             });
@@ -402,7 +536,7 @@ export class memoAdmin extends memoConfigure {
     }
 
     public async ShowInNewWindow(context: vscode.ExtensionContext): Promise<void> {
-        this.safeReadConfig();
+        this.updateConfiguration();
 
         if (!this.memodir || !fs.existsSync(this.memodir)) {
             vscode.window.showErrorMessage(localize('memoAdmin.invalidMemoDir', 'The selected memo root does not exist'));
@@ -478,108 +612,59 @@ export class memoAdmin extends memoConfigure {
         memoAdmin.statsCache = undefined;
     }
 
-    private getSettingsTarget(): vscode.ConfigurationTarget {
-        return (vscode.workspace.workspaceFolders?.length ?? 0) > 0
-            ? vscode.ConfigurationTarget.Workspace
-            : vscode.ConfigurationTarget.Global;
-    }
-
     private async updatePinnedFiles(updater: (current: string[]) => string[]): Promise<void> {
-        const normalizedCurrent = (this.memoPinnedFiles ?? [])
+        if (!memoAdmin.memoIndex) {
+            return;
+        }
+        const normalizedCurrent = memoAdmin.memoIndex.getPinnedFiles()
             .map((filename) => upath.normalizeTrim(filename))
             .filter(Boolean);
         const next = updater(normalizedCurrent)
             .map((filename) => upath.normalizeTrim(filename))
             .filter((filename, index, array) => !!filename && array.indexOf(filename) === index);
-        await vscode.workspace.getConfiguration('memo-life-for-you').update('memoPinnedFiles', next, this.getSettingsTarget());
-        this.updateConfiguration();
+        memoAdmin.memoIndex.setPinnedFiles(next);
     }
 
     private scaffoldMemoFolders(memodir: string): void {
-        const templatesDir = upath.join(memodir, '.templates');
-        const snippetsDir = upath.join(memodir, '.snippets');
-        const assetsDir = upath.join(memodir, 'assets');
+        const metaDir = upath.join(memodir, this.memoMetaDir);
+        const templatesDir = upath.join(metaDir, 'templates');
+        const snippetsDir = upath.join(metaDir, 'snippets');
 
-        for (const dir of [templatesDir, snippetsDir, assetsDir]) {
+        for (const dir of [templatesDir, snippetsDir]) {
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true });
             }
         }
 
-        const sampleTemplate = upath.join(templatesDir, 'default.md');
-        if (!fs.existsSync(sampleTemplate)) {
-            fs.writeFileSync(sampleTemplate, [
-                '# {{.Date}} {{.Title}}',
-                '',
-                '## Summary',
-                '',
-                '',
-                '',
-                '## Notes',
-                '',
-                '',
-                ''
-            ].join('\n'), 'utf8');
+        // Copy scaffold files from resources/scaffold/ (file-based, not hardcoded)
+        const scaffoldRoot = memoAdmin.extensionPath
+            ? upath.join(memoAdmin.extensionPath, 'resources', 'scaffold')
+            : '';
+        if (!scaffoldRoot || !fs.existsSync(scaffoldRoot)) {
+            return;
         }
 
-        const meetingTemplate = upath.join(templatesDir, 'meeting.md');
-        if (!fs.existsSync(meetingTemplate)) {
-            fs.writeFileSync(meetingTemplate, [
-                '# {{.Date}} {{.Title}}',
-                '',
-                '## Attendees',
-                '',
-                '- ',
-                '',
-                '## Agenda',
-                '',
-                '1. ',
-                '',
-                '## Action Items',
-                '',
-                '- [ ] ',
-                '',
-                ''
-            ].join('\n'), 'utf8');
-        }
+        const scaffoldTemplatesDir = upath.join(scaffoldRoot, 'templates');
+        const scaffoldSnippetsDir = upath.join(scaffoldRoot, 'snippets');
 
-        const sampleSnippet = upath.join(snippetsDir, 'memo.json');
-        if (!fs.existsSync(sampleSnippet)) {
-            const snippetContent = {
-                'Task list': {
-                    prefix: 'task',
-                    body: [
-                        '## Tasks',
-                        '',
-                        '- [ ] ${1:task}',
-                        '- [ ] ${2:task}',
-                        '- [ ] ${3:task}',
-                        ''
-                    ],
-                    description: 'Insert a task checklist'
-                },
-                'Code block': {
-                    prefix: 'codeblock',
-                    body: [
-                        '```${1:language}',
-                        '${2:code}',
-                        '```',
-                        ''
-                    ],
-                    description: 'Insert a fenced code block'
-                },
-                'Table': {
-                    prefix: 'table',
-                    body: [
-                        '| ${1:Header1} | ${2:Header2} | ${3:Header3} |',
-                        '|---|---|---|',
-                        '| ${4:cell} | ${5:cell} | ${6:cell} |',
-                        ''
-                    ],
-                    description: 'Insert a markdown table'
+        // Copy template files that don't already exist
+        if (fs.existsSync(scaffoldTemplatesDir)) {
+            for (const file of fs.readdirSync(scaffoldTemplatesDir)) {
+                const dest = upath.join(templatesDir, file);
+                if (!fs.existsSync(dest)) {
+                    fs.copyFileSync(upath.join(scaffoldTemplatesDir, file), dest);
                 }
-            };
-            fs.writeFileSync(sampleSnippet, JSON.stringify(snippetContent, null, 2) + '\n', 'utf8');
+            }
+        }
+
+        // Copy snippet files that don't already exist
+        if (fs.existsSync(scaffoldSnippetsDir)) {
+            for (const file of fs.readdirSync(scaffoldSnippetsDir)) {
+                const dest = upath.join(snippetsDir, file);
+                if (!fs.existsSync(dest)) {
+                    fs.copyFileSync(upath.join(scaffoldSnippetsDir, file), dest);
+                }
+            }
         }
     }
 
@@ -654,7 +739,7 @@ export class memoAdmin extends memoConfigure {
     }
 
     private collectStats(): MemoStats {
-        if (!this.memodir || !fs.existsSync(this.memodir)) {
+        if (!this.memodir || this.memodir === '.' || !fs.existsSync(this.memodir)) {
             return this.emptyStats();
         }
 
@@ -662,7 +747,7 @@ export class memoAdmin extends memoConfigure {
             memodir: this.normalizeWorkspacePath(this.memodir),
             extnames: this.memoListDisplayExtname,
             datePathFormat: this.memoDatePathFormat,
-            pinnedFiles: this.memoPinnedFiles
+            pinnedFiles: memoAdmin.memoIndex?.getPinnedFiles() ?? []
         });
         const now = Date.now();
         if (memoAdmin.statsCache
@@ -706,7 +791,7 @@ export class memoAdmin extends memoConfigure {
 
                 items.push(this.createRecentFileEntryFromMeta(filename, meta));
             }
-            recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 8);
+            recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, this.memoRecentCount || 8);
         } else {
             const files = this.readFilesRecursively(this.memodir)
                 .filter((filename) => this.memoListDisplayExtname.includes(upath.extname(filename).replace(/^\./, '')));
@@ -731,12 +816,12 @@ export class memoAdmin extends memoConfigure {
                     // file may have been deleted between readdir and stat
                 }
             }
-            recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 8);
+            recentCandidates = items.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, this.memoRecentCount || 8);
         }
 
         const recentFiles = recentCandidates;
         const pinnedFiles: MemoRecentItem[] = [];
-        for (const raw of (this.memoPinnedFiles ?? [])) {
+        for (const raw of (memoAdmin.memoIndex?.getPinnedFiles() ?? [])) {
             const filename = upath.normalizeTrim(raw);
             if (!filename || pinnedFiles.some((p) => this.normalizeWorkspacePath(p.filename) === this.normalizeWorkspacePath(filename))) {
                 continue;
@@ -797,6 +882,9 @@ export class memoAdmin extends memoConfigure {
         const dirs: string[] = [];
 
         for (const dirent of dirents) {
+            if (dirent.name.startsWith('.')) {
+                continue;
+            }
             const fullpath = upath.normalize(upath.join(dir, dirent.name));
             if (dirent.isDirectory()) {
                 dirs.push(fullpath);
@@ -855,7 +943,6 @@ export class memoAdmin extends memoConfigure {
         const nonce = `${Date.now()}`;
         const safeMemoDir = this.memodir || '';
         const safeDatePathFormat = this.memoDatePathFormat || 'yyyy/MM';
-        const effectiveTemplatePath = this.memotemplate || this.ensureBuiltInTemplateFile();
         let currentDateDirLabel = '-';
 
         try {
@@ -878,6 +965,7 @@ export class memoAdmin extends memoConfigure {
         const colorThemeLabel = this.getColorThemeLabel(this.memoAdminColorTheme, locale);
         const t = (key: string, fallback: string) => this.translate(locale, key, fallback);
         const gradientClass = this.memoAdminUseGradient ? 'with-gradient' : 'without-gradient';
+        const advancedMode = this.memoAdminAdvancedMode || context.extensionMode === vscode.ExtensionMode.Development;
         const tips = this.getRandomTips(locale, 3);
 
         return `<!DOCTYPE html>
@@ -1223,6 +1311,16 @@ export class memoAdmin extends memoConfigure {
             color: var(--text);
         }
 
+        .warning--info {
+            border-color: rgba(55, 148, 255, 0.38);
+            background: rgba(55, 148, 255, 0.1);
+        }
+
+        .index-badge--warn {
+            background: rgba(201, 122, 26, 0.18);
+            color: #d29922;
+        }
+
         .config-block {
             margin-top: 16px;
             border: 1px solid var(--border);
@@ -1533,74 +1631,150 @@ export class memoAdmin extends memoConfigure {
             margin-bottom: 8px;
         }
         .snippet-status .ok { color: #3fb950; }
+
+        .folder-setting {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .folder-setting .ok { color: #3fb950; }
+        .folder-setting .err { color: #f85149; }
+        .folder-setting-path {
+            word-break: break-all;
+        }
+        .action-button--small {
+            font-size: 11px;
+            padding: 2px 8px;
+        }
         .snippet-status .warn { color: #d29922; }
         .snippet-status .err { color: #f85149; }
 
-        /* Welcome / Setup guide */
-        .welcome-card {
+        /* Welcome / Setup carousel */
+        .welcome-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            background: var(--editor-bg);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            overflow: auto;
+        }
+        .carousel {
+            max-width: 520px;
+            width: 100%;
+        }
+        .carousel-slides {
+            position: relative;
+            overflow: hidden;
+            min-height: 340px;
+        }
+        .carousel-slide {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
-            padding: 32px 24px;
+            padding: 24px;
         }
-        .welcome-icon {
-            font-size: 48px;
-            margin-bottom: 12px;
+        .carousel-slide.active {
+            display: flex;
         }
-        .welcome-title {
-            font-size: 20px;
+        .slide-icon {
+            font-size: 56px;
+            margin-bottom: 16px;
+            line-height: 1;
+        }
+        .slide-title {
+            font-size: 22px;
             font-weight: 700;
             color: var(--accent-strong);
             margin: 0 0 8px;
         }
-        .welcome-desc {
+        .slide-desc {
             color: var(--muted);
             font-size: 14px;
+            line-height: 1.6;
             margin: 0 0 24px;
-            max-width: 480px;
-            margin-left: auto;
-            margin-right: auto;
+            max-width: 400px;
         }
-        .welcome-steps {
+        .slide-action {
             display: flex;
             flex-direction: column;
-            gap: 16px;
-            max-width: 420px;
-            margin: 0 auto 24px;
-            text-align: left;
+            align-items: center;
+            gap: 8px;
         }
-        .welcome-step {
-            display: flex;
-            gap: 12px;
-            align-items: flex-start;
+        .slide-action .primary {
+            min-width: 200px;
+            padding: 10px 24px;
+            font-size: 14px;
         }
-        .step-number {
+        .slide-hint {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+        .carousel-nav {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: var(--accent-strong);
-            color: var(--surface-bg);
-            font-weight: 700;
-            font-size: 14px;
-            flex-shrink: 0;
+            gap: 16px;
+            margin-top: 24px;
         }
-        .step-content {
-            flex: 1;
-        }
-        .step-title {
-            font-weight: 600;
-            font-size: 14px;
-            margin-bottom: 2px;
-        }
-        .step-desc {
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .welcome-actions {
+        .carousel-dots {
             display: flex;
             gap: 8px;
-            justify-content: center;
+        }
+        .carousel-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-strong);
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .carousel-dot.active {
+            background: var(--accent-strong);
+        }
+        .carousel-btn {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .carousel-btn:hover {
+            background: var(--surface-bg);
+            border-color: var(--accent-strong);
+        }
+        .carousel-btn:disabled {
+            opacity: 0.3;
+            cursor: default;
+        }
+        .carousel-skip {
+            display: block;
+            margin: 12px auto 0;
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .carousel-skip:hover {
+            color: var(--text);
         }
 
         .footer {
@@ -1978,6 +2152,18 @@ export class memoAdmin extends memoConfigure {
             padding: 8px 0 2px;
         }
 
+        .calendar-stats-row {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr;
+            gap: 14px;
+        }
+
+        @media (max-width: 900px) {
+            .calendar-stats-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
         .detail-block {
             border: 1px solid var(--border);
             border-radius: 12px;
@@ -2006,7 +2192,7 @@ export class memoAdmin extends memoConfigure {
 
         .detail-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 14px;
             padding: 14px;
         }
@@ -2150,14 +2336,6 @@ export class memoAdmin extends memoConfigure {
                         <span class="field-help">${t('memoAdmin.memodirHelp', 'Root folder for memo files')}</span>
                     </label>
                     <label class="field">
-                        <span class="field-label">${t('memoAdmin.template', 'Template file')}</span>
-                        <div class="field-row">
-                            <input class="field-input" id="memotemplate" type="text" value="${escapeHtml(effectiveTemplatePath)}">
-                            <button class="secondary" type="button" data-command="pickTemplateFile">${t('memoAdmin.browse', 'Browse')}</button>
-                        </div>
-                        <span class="field-help">${t('memoAdmin.templateHelp', 'The built-in template file is prefilled by default')}</span>
-                    </label>
-                    <label class="field">
                         <span class="field-label">${t('memoAdmin.datePathFormat', 'Date folder format')}</span>
                         <input class="field-input" id="memoDatePathFormat" type="text" value="${escapeHtml(this.memoDatePathFormat || 'yyyy/MM')}">
                         <span class="field-help">${t('memoAdmin.datePathHelp', 'Example: yyyy/MM or yyyy/MM/dd')}</span>
@@ -2166,7 +2344,6 @@ export class memoAdmin extends memoConfigure {
                 <div class="action-help">${t('memoAdmin.workspaceHelp', 'Startup file: create a .code-workspace that opens this memo folder and starts with Memo: Admin. You can associate it with VS Code.')} ${t('memoAdmin.shortcutHelp', 'Keyboard shortcut changes are managed from Keyboard Shortcuts or keybindings.json.')}</div>
                 <div class="config-actions">
                     <button class="secondary" data-command="createWorkspace" title="${t('memoAdmin.createWorkspaceTooltip', 'Generate a startup .code-workspace file. If you associate it with VS Code, double-clicking it can open directly into Memo: Admin mode.')}">${t('memoAdmin.createWorkspace', 'Create workspace')}</button>
-                    <button class="secondary" data-command="openConfig">${t('memoAdmin.openConfig', 'Open config file')}</button>
                     <button class="secondary" data-command="openKeyboardShortcuts">${t('memoAdmin.openKeyboardShortcuts', 'Keyboard shortcuts')}</button>
                     <button class="secondary" data-command="openSettings">${t('memoAdmin.openAdvancedSettings', 'Advanced settings')}</button>
                     <button class="primary" data-command="saveCoreSettings">${t('memoAdmin.save', 'Save')}</button>
@@ -2176,6 +2353,7 @@ export class memoAdmin extends memoConfigure {
             <div class="toolbar">
                 <div class="toolbar-group actions">
                     <button class="primary" data-command="newMemo">${t('memoAdmin.newMemo', 'New memo')}</button>
+                    <button class="primary" data-command="quickMemo">${t('memoAdmin.quickMemo', "Today's memo")}</button>
                     <button class="primary" data-command="searchMemo">${t('memoAdmin.searchMemo', 'Search memo')}</button>
                     <button class="secondary" data-command="openFolder">${t('memoAdmin.openFolder', 'Open folder')}</button>
                 </div>
@@ -2203,55 +2381,70 @@ export class memoAdmin extends memoConfigure {
                 <span>${t('memoAdmin.language', 'Language')}: <code>${escapeHtml(this.getLanguageLabel(locale))}</code></span>
                 <span>${t('memoAdmin.themeHint', 'Visual settings are managed from VS Code Settings.')}</span>
             </div>
+            ${advancedMode ? `
             <div class="tips">
                 <div class="tips-header">${t('memoAdmin.tips', 'Tips')}</div>
                 <div class="tips-list">
                     ${tips.map((tip) => `<div class="tips-item">${escapeHtml(tip)}</div>`).join('')}
                 </div>
             </div>
+            ` : ''}
         </section>
 
         ${!hasValidMemoDir ? `
-        <section class="stack">
-            <article class="card welcome-card">
-                <div class="welcome-icon">&#128221;</div>
-                <h2 class="welcome-title">${t('memoAdmin.welcomeTitle', 'Welcome to Memo Life For You!')}</h2>
-                <p class="welcome-desc">${t('memoAdmin.welcomeDesc', 'Set up a memo directory to start organizing your notes. You can configure it in the settings above.')}</p>
-                <div class="welcome-steps">
-                    <div class="welcome-step">
-                        <span class="step-number">1</span>
-                        <div class="step-content">
-                            <div class="step-title">${t('memoAdmin.step1Title', 'Set memo directory')}</div>
-                            <div class="step-desc">${t('memoAdmin.step1Desc', 'Open the settings panel above and specify the path where your memos will be stored.')}</div>
+        <div class="welcome-overlay" id="welcomeOverlay">
+            <div class="carousel">
+                <div class="carousel-slides" id="carouselSlides">
+                    <!-- Step 1: Memo directory -->
+                    <div class="carousel-slide active" data-slide="0">
+                        <div class="slide-icon">&#128194;</div>
+                        <h2 class="slide-title">${t('memoAdmin.welcomeTitle', 'Welcome to Memo Life For You!')}</h2>
+                        <p class="slide-desc">${t('memoAdmin.slide1Desc', 'First, choose a folder to store your memos. All your notes, templates, and snippets will live here.')}</p>
+                        <div class="slide-action">
+                            <button class="primary" data-command="pickMemoDir">${t('memoAdmin.pickMemoDir', 'Choose memo folder...')}</button>
+                            <span class="slide-hint">${t('memoAdmin.slide1Hint', 'You can change this later in settings.')}</span>
                         </div>
                     </div>
-                    <div class="welcome-step">
-                        <span class="step-number">2</span>
-                        <div class="step-content">
-                            <div class="step-title">${t('memoAdmin.step2Title', 'Create your first memo')}</div>
-                            <div class="step-desc">${t('memoAdmin.step2Desc', 'Use the "New memo" button or run "Memo: New" from the command palette.')}</div>
+                    <!-- Step 2: Create first memo -->
+                    <div class="carousel-slide" data-slide="1">
+                        <div class="slide-icon">&#9997;&#65039;</div>
+                        <h2 class="slide-title">${t('memoAdmin.step2Title', 'Create your first memo')}</h2>
+                        <p class="slide-desc">${t('memoAdmin.slide2Desc', 'Memos are Markdown files organized by date. Create one now, or skip and come back later.')}</p>
+                        <div class="slide-action">
+                            <button class="primary" data-command="memoNew">${t('memoAdmin.createFirstMemo', 'Create a memo')}</button>
                         </div>
                     </div>
-                    <div class="welcome-step">
-                        <span class="step-number">3</span>
-                        <div class="step-content">
-                            <div class="step-title">${t('memoAdmin.step3Title', 'Customize templates & snippets')}</div>
-                            <div class="step-desc">${t('memoAdmin.step3Desc', 'Place .md files in .templates/ and snippet JSON in .snippets/ inside your memo directory.')}</div>
+                    <!-- Step 3: Templates & snippets -->
+                    <div class="carousel-slide" data-slide="2">
+                        <div class="slide-icon">&#128640;</div>
+                        <h2 class="slide-title">${t('memoAdmin.step3Title', 'Customize templates & snippets')}</h2>
+                        <p class="slide-desc">${t('memoAdmin.slide3Desc', 'Place .md files in .memo/templates/ for new-memo templates, and snippet JSON in .memo/snippets/ for quick insertion. Both are auto-created in your memo folder.')}</p>
+                        <div class="slide-action">
+                            <button class="primary" data-command="closeWelcome">${t('memoAdmin.getStarted', 'Get started!')}</button>
                         </div>
                     </div>
                 </div>
-                <div class="welcome-actions">
-                    <button class="primary" data-command="openSettings">${t('memoAdmin.openAdvancedSettings', 'Advanced settings')}</button>
-                    <button class="secondary" data-command="createWorkspace">${t('memoAdmin.createWorkspace', 'Create workspace')}</button>
-                </div>
-            </article>
-        </section>
-        ` : `
+                <nav class="carousel-nav">
+                    <button class="carousel-btn" id="carouselPrev" disabled>${t('memoAdmin.prev', 'Back')}</button>
+                    <div class="carousel-dots">
+                        <button class="carousel-dot active" data-dot="0"></button>
+                        <button class="carousel-dot" data-dot="1"></button>
+                        <button class="carousel-dot" data-dot="2"></button>
+                    </div>
+                    <button class="carousel-btn" id="carouselNext">${t('memoAdmin.next', 'Next')}</button>
+                </nav>
+                <button class="carousel-skip" id="carouselSkip">${t('memoAdmin.skipSetup', 'Skip setup')}</button>
+            </div>
+        </div>
+        ` : ''}
+
+        ${!hasValidMemoDir ? '' : `
         <section class="stack">
+            ${this.memoRecentCount > 0 ? `
             <details class="card" open>
                 <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.recentHistory', 'Recent history')}</h2>
-                    <div class="card-caption">${t('memoAdmin.latest8Updated', 'Latest 8 updates')}</div>
+                    <div class="card-caption">${t('memoAdmin.latestNUpdated', 'Latest {0} updates').replace('{0}', String(stats.recentFiles.length))}</div>
                 </summary>
                 ${renderRecentFiles(stats.recentFiles, {
                     noDataLabel: t('memoAdmin.noData', 'No data'),
@@ -2263,7 +2456,8 @@ export class memoAdmin extends memoConfigure {
                     updatedLabel: t('memoAdmin.updated', 'Updated'),
                     sizeLabel: t('memoAdmin.size', 'Size')
                 })}
-            </details>
+            </details>` : ''}
+            <div class="calendar-stats-row">
             <details class="card" open>
                 <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.calendar', 'Calendar')}</h2>
@@ -2281,6 +2475,14 @@ export class memoAdmin extends memoConfigure {
                     <div class="calendar-grid" id="cal-grid"></div>
                 </div>
             </details>
+            <details class="card" open>
+                <summary class="card-header card-toggle">
+                    <h2 class="card-title">${t('memoAdmin.monthlyCounts', 'Monthly counts')}</h2>
+                    <div class="card-caption">${t('memoAdmin.latest12', 'Latest 12 months')}</div>
+                </summary>
+                ${renderBarList(stats.monthCounts, t('memoAdmin.noData', 'No data'), { pathResolver: (label) => upath.join(this.memodir, label) })}
+            </details>
+            </div>
             ${stats.tagCounts.length > 0 ? `
             <details class="card" open>
                 <summary class="card-header card-toggle">
@@ -2296,19 +2498,22 @@ export class memoAdmin extends memoConfigure {
             ` : ''}
             ${(() => {
                 const ss = memoAdmin.snippetProvider?.getStatus();
-                if (!ss) { return ''; }
+                const snippetsDir = this.memoSnippetsDir
+                    ? upath.normalize(this.memoSnippetsDir)
+                    : (this.memodir ? upath.normalize(upath.join(this.memodir, this.memoMetaDir, 'snippets')) : '');
                 return `
             <details class="card" open>
                 <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.snippets', 'Snippets')}</h2>
-                    <div class="card-caption">${t('memoAdmin.snippetsCaption', 'Custom completions for Markdown')}</div>
+                    <div class="card-caption">${t('memoAdmin.snippetsCaption', 'Custom completions for Markdown')}${ss ? ` (${ss.snippetCount})` : ''}</div>
                 </summary>
-                <div class="snippet-status">
-                    ${t('memoAdmin.snippetsDir', 'Directory')}: <code>${escapeHtml(ss.dir || '(not set)')}</code>
-                    ${ss.exists ? `<span class="ok">&#10003;</span>` : `<span class="err">&#10007; ${t('memoAdmin.snippetsDirMissing', 'not found')}</span>`}
-                    &nbsp;|&nbsp; ${t('memoAdmin.snippetsFiles', 'Files')}: ${ss.fileCount} &nbsp;|&nbsp; ${t('memoAdmin.snippetsLoaded', 'Loaded')}: ${ss.snippetCount}
+                <div class="folder-setting">
+                    <span class="folder-setting-label">${t('memoAdmin.snippetsDir', 'Directory')}:</span>
+                    <code class="folder-setting-path">${escapeHtml(snippetsDir || '(not set)')}</code>
+                    ${snippetsDir && fs.existsSync(snippetsDir) ? `<span class="ok">&#10003;</span>` : snippetsDir ? `<span class="err">&#10007;</span>` : ''}
+                    <button class="action-button" data-command="pickSnippetsDir">${t('memoAdmin.changeDir', 'Change')}</button>
                 </div>
-                ${ss.snippetCount > 0 ? `
+                ${ss && ss.snippetCount > 0 ? `
                 <table class="snippet-table">
                     <thead><tr>
                         <th>Prefix</th>
@@ -2325,8 +2530,8 @@ export class memoAdmin extends memoConfigure {
             ${(() => {
                 const templatesDir = this.memoTemplatesDir
                     ? upath.normalize(this.memoTemplatesDir)
-                    : upath.normalize(upath.join(this.memodir, '.templates'));
-                const tplExists = fs.existsSync(templatesDir);
+                    : (this.memodir ? upath.normalize(upath.join(this.memodir, this.memoMetaDir, 'templates')) : '');
+                const tplExists = templatesDir && fs.existsSync(templatesDir);
                 let tplFiles: Array<{ name: string; size: number }> = [];
                 if (tplExists) {
                     try {
@@ -2341,26 +2546,37 @@ export class memoAdmin extends memoConfigure {
                             });
                     } catch { /* ignore */ }
                 }
-                const defaultTpl = this.memotemplate;
+                const resolvedTpl = this.resolveDefaultTemplatePath();
+                const defaultTplName = resolvedTpl ? upath.basename(resolvedTpl) : '';
                 return `
             <details class="card" open>
                 <summary class="card-header card-toggle">
                     <h2 class="card-title">${t('memoAdmin.templates', 'Templates')}</h2>
                     <div class="card-caption">${t('memoAdmin.templatesCaption', 'Memo templates for new file creation')} (${tplFiles.length})</div>
                 </summary>
-                <div class="snippet-status">
-                    ${t('memoAdmin.templatesDir', 'Directory')}: <code>${escapeHtml(templatesDir)}</code>
-                    ${tplExists ? `<span class="ok">&#10003;</span>` : `<span class="err">&#10007; ${t('memoAdmin.templatesDirMissing', 'not found')}</span>`}
-                    ${defaultTpl ? `&nbsp;|&nbsp; ${t('memoAdmin.defaultTemplate', 'Default')}: <code>${escapeHtml(upath.basename(defaultTpl))}</code>` : ''}
+                <div class="folder-setting">
+                    <span class="folder-setting-label">${t('memoAdmin.templatesDir', 'Directory')}:</span>
+                    <code class="folder-setting-path">${escapeHtml(templatesDir || '(not set)')}</code>
+                    ${tplExists ? `<span class="ok">&#10003;</span>` : templatesDir ? `<span class="err">&#10007;</span>` : ''}
+                    <button class="action-button" data-command="pickTemplatesDir">${t('memoAdmin.changeDir', 'Change')}</button>
                 </div>
+                <div class="folder-setting"><span class="folder-setting-label">${t('memoAdmin.defaultTemplate', 'Default')}:</span> <code>${defaultTplName ? escapeHtml(defaultTplName) : t('memoAdmin.builtinTemplate', 'Built-in')}</code> <span class="help-hint">${t('memoAdmin.defaultTemplateHint', 'Used by New Memo and Quick Memo')}</span></div>
                 ${tplFiles.length > 0 ? `
                 <table class="snippet-table">
                     <thead><tr>
                         <th>${t('memoAdmin.templateFile', 'File')}</th>
                         <th>${t('memoAdmin.templateSize', 'Size')}</th>
+                        <th></th>
                     </tr></thead>
                     <tbody>
-                        ${tplFiles.map(f => `<tr><td><code>${escapeHtml(f.name)}</code></td><td>${f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B'}</td></tr>`).join('')}
+                        ${tplFiles.map(f => `<tr>
+                            <td><code>${escapeHtml(f.name)}</code></td>
+                            <td>${f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B'}</td>
+                            <td>${defaultTplName === f.name
+                                ? `<span class="index-badge index-badge--ok">${t('memoAdmin.defaultLabel', 'default')}</span>`
+                                : `<button class="action-button action-button--small" data-command="setDefaultTemplate" data-template-path="${escapeHtml(upath.join(templatesDir, f.name))}">${t('memoAdmin.setDefault', 'Set default')}</button>`
+                            }</td>
+                        </tr>`).join('')}
                     </tbody>
                 </table>
                 ` : `<div class="empty-state">${t('memoAdmin.templatesEmpty', 'No templates found. Place .md files in the templates directory.')}</div>`}
@@ -2381,6 +2597,7 @@ export class memoAdmin extends memoConfigure {
                     sizeLabel: t('memoAdmin.size', 'Size')
                 }) : `<div class="empty-state">${t('memoAdmin.pinnedEmpty', 'No pinned memos. Use the pin button in Recent history to add.')}</div>`}
             </details>
+            ${advancedMode ? `
             <details class="detail-block">
                 <summary>
                     <span class="summary-label">
@@ -2390,13 +2607,6 @@ export class memoAdmin extends memoConfigure {
                     <span class="summary-caret">&#9660;</span>
                 </summary>
                 <div class="detail-grid">
-                    <section class="mini-panel">
-                        <div class="mini-header">
-                            <div class="mini-title">${t('memoAdmin.monthlyCounts', 'Monthly counts')}</div>
-                            <div class="mini-caption">${t('memoAdmin.latest12', 'Latest 12 months')}</div>
-                        </div>
-                        ${renderBarList(stats.monthCounts, t('memoAdmin.noData', 'No data'), { pathResolver: (label) => upath.join(this.memodir, label) })}
-                    </section>
                     <section class="mini-panel">
                         <div class="mini-header">
                             <div class="mini-title">${t('memoAdmin.yearlyCounts', 'Yearly counts')}</div>
@@ -2444,6 +2654,7 @@ export class memoAdmin extends memoConfigure {
                     ` : ''}
                 </div>
             </details>
+            ` : ''}
         </section>
         `}
         <footer class="footer">
@@ -2660,8 +2871,14 @@ export class memoAdmin extends memoConfigure {
                     vscode.postMessage({
                         command: 'saveCoreSettings',
                         memodir: document.getElementById('memodir').value,
-                        memotemplate: document.getElementById('memotemplate').value,
                         memoDatePathFormat: document.getElementById('memoDatePathFormat').value
+                    });
+                    return;
+                }
+                if (button.dataset.command === 'setDefaultTemplate') {
+                    vscode.postMessage({
+                        command: 'setDefaultTemplate',
+                        templatePath: button.dataset.templatePath
                     });
                     return;
                 }
@@ -2705,13 +2922,73 @@ export class memoAdmin extends memoConfigure {
             });
         });
 
+        // Carousel logic
+        (function() {
+            const overlay = document.getElementById('welcomeOverlay');
+            if (!overlay) return;
+            const slides = overlay.querySelectorAll('.carousel-slide');
+            const dots = overlay.querySelectorAll('.carousel-dot');
+            const prevBtn = document.getElementById('carouselPrev');
+            const nextBtn = document.getElementById('carouselNext');
+            const skipBtn = document.getElementById('carouselSkip');
+            let current = 0;
+
+            function goTo(idx) {
+                slides.forEach((s, i) => {
+                    s.classList.remove('active', 'prev');
+                    if (i < idx) s.classList.add('prev');
+                    if (i === idx) s.classList.add('active');
+                });
+                dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+                prevBtn.disabled = idx === 0;
+                nextBtn.style.display = idx === slides.length - 1 ? 'none' : '';
+                current = idx;
+            }
+
+            prevBtn.addEventListener('click', () => { if (current > 0) goTo(current - 1); });
+            nextBtn.addEventListener('click', () => { if (current < slides.length - 1) goTo(current + 1); });
+            dots.forEach(d => d.addEventListener('click', () => goTo(Number(d.dataset.dot))));
+            function finishWelcome() {
+                vscode.postMessage({ command: 'finishWelcome' });
+                overlay.remove();
+            }
+            skipBtn.addEventListener('click', finishWelcome);
+
+            // closeWelcome button
+            const closeBtn = overlay.querySelector('[data-command="closeWelcome"]');
+            if (closeBtn) closeBtn.addEventListener('click', (e) => { e.stopPropagation(); finishWelcome(); });
+
+            // pickMemoDir in carousel — after folder is picked, auto-advance to step 2
+            const pickBtn = overlay.querySelector('[data-command="pickMemoDir"]');
+            if (pickBtn) {
+                pickBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    vscode.postMessage({ command: 'pickMemoDir' });
+                });
+            }
+
+            // memoNew in carousel
+            const newBtn = overlay.querySelector('[data-command="memoNew"]');
+            if (newBtn) {
+                newBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    vscode.postMessage({ command: 'newMemo' });
+                    goTo(2);
+                });
+            }
+
+            // Listen for memoDir set — auto-advance
+            window.addEventListener('message', (event) => {
+                if (event.data.command === 'memoDirSet') {
+                    goTo(1);
+                }
+            });
+        })();
+
         window.addEventListener('message', (event) => {
             const message = event.data;
             if (message.command === 'setMemoDir') {
                 document.getElementById('memodir').value = message.value;
-            }
-            if (message.command === 'setTemplateFile') {
-                document.getElementById('memotemplate').value = message.value;
             }
         });
     </script>
@@ -2721,7 +2998,7 @@ export class memoAdmin extends memoConfigure {
 
     private renderPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
         this.updateConfiguration();
-        this.safeReadConfig();
+        this.updateConfiguration();
         panel.title = this.translate(this.getDisplayLanguage(), 'extension.memoAdmin.title', 'Memo Admin');
 
         if (!memoAdmin.memoIndex && this.memodir && fs.existsSync(this.memodir)) {
@@ -2898,6 +3175,7 @@ const JA_MESSAGES: Record<string, string> = {
     'extension.memoAdmin.title': 'Memo: \u7ba1\u7406\u753b\u9762',
     'memoAdmin.summary': '\u73fe\u5728\u306e\u30e1\u30e2\u4fdd\u5b58\u72b6\u6cc1\u3068\u64cd\u4f5c\u30e1\u30cb\u30e5\u30fc',
     'memoAdmin.newMemo': '\u65b0\u898f\u30e1\u30e2',
+    'memoAdmin.quickMemo': '\u4eca\u65e5\u306e\u30e1\u30e2',
     'memoAdmin.searchMemo': '\u30e1\u30e2\u691c\u7d22',
     'memoAdmin.openFolder': '\u30d5\u30a9\u30eb\u30c0\u3092\u958b\u304f',
     'memoAdmin.openConfig': '\u8a2d\u5b9a\u30d5\u30a1\u30a4\u30eb\u3092\u958b\u304f',
@@ -2929,7 +3207,7 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.saveWorkspaceFile': '\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9\u30d5\u30a1\u30a4\u30eb\u3092\u4fdd\u5b58',
     'memoAdmin.themeHint': '\u8868\u793a\u8a2d\u5b9a\u306f VS Code \u306e\u8a2d\u5b9a\u753b\u9762\u304b\u3089\u5909\u66f4\u3067\u304d\u307e\u3059\u3002',
     'memoAdmin.recentHistory': '\u76f4\u8fd1\u5c65\u6b74',
-    'memoAdmin.latest8Updated': '\u66f4\u65b0\u304c\u65b0\u3057\u3044 8 \u4ef6',
+    'memoAdmin.latestNUpdated': '\u66f4\u65b0\u304c\u65b0\u3057\u3044 {0} \u4ef6',
     'memoAdmin.pinnedMemos': '\u30d4\u30f3\u7559\u3081\u30e1\u30e2',
     'memoAdmin.pinnedCaption': '\u56fa\u5b9a\u30a2\u30af\u30bb\u30b9',
     'memoAdmin.pinnedEmpty': '\u30d4\u30f3\u7559\u3081\u30e1\u30e2\u306f\u3042\u308a\u307e\u305b\u3093\u3002\u6700\u8fd1\u306e\u5c65\u6b74\u306e\u30d4\u30f3\u30dc\u30bf\u30f3\u304b\u3089\u8ffd\u52a0\u3067\u304d\u307e\u3059\u3002',
@@ -2978,6 +3256,15 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.indexFlushTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u4eca\u3059\u3050\u30c7\u30a3\u30b9\u30af\u306b\u4fdd\u5b58\u3057\u307e\u3059',
     'memoAdmin.indexRebuild': '\u518d\u69cb\u7bc9',
     'memoAdmin.indexRebuildTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u524a\u9664\u3057\u3066\u6700\u521d\u304b\u3089\u4f5c\u308a\u76f4\u3057\u307e\u3059',
+    'memoAdmin.tomlFallbackWarning': '\u4e00\u90e8\u306e\u8a2d\u5b9a\u304c config.toml \u304b\u3089\u8aad\u307f\u8fbc\u307e\u308c\u3066\u3044\u307e\u3059\u3002VS Code \u8a2d\u5b9a\u306b\u79fb\u884c\u3059\u308b\u3068\u7ba1\u7406\u304c\u7c21\u5358\u306b\u306a\u308a\u307e\u3059\u3002',
+    'memoAdmin.migrateNow': '\u4eca\u3059\u3050\u79fb\u884c',
+    'memoAdmin.tomlPath': '\u30d5\u30a1\u30a4\u30eb',
+    'memoAdmin.tomlStatus': '\u30b9\u30c6\u30fc\u30bf\u30b9',
+    'memoAdmin.tomlInUse': '\u30d5\u30a9\u30fc\u30eb\u30d0\u30c3\u30af\u4e2d',
+    'memoAdmin.tomlNotUsed': '\u672a\u4f7f\u7528',
+    'memoAdmin.migrateToVscode': 'VS Code \u8a2d\u5b9a\u306b\u79fb\u884c',
+    'memoAdmin.migrateTooltip': 'config.toml \u306e\u5024\u3092 VS Code \u8a2d\u5b9a\u306b\u30b3\u30d4\u30fc\u3057\u307e\u3059',
+    'memoAdmin.openConfigTooltip': 'config.toml \u3092\u30a8\u30c7\u30a3\u30bf\u3067\u958b\u304d\u307e\u3059',
     'memoAdmin.calendar': '\u30ab\u30ec\u30f3\u30c0\u30fc',
     'memoAdmin.calendarCaption': '\u65e5\u5225\u30e1\u30e2\u6d3b\u52d5',
     'memoAdmin.calPrev': '\u524d\u3078',
@@ -2999,17 +3286,30 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.templatesDir': '\u30c7\u30a3\u30ec\u30af\u30c8\u30ea',
     'memoAdmin.templatesDirMissing': '\u898b\u3064\u304b\u308a\u307e\u305b\u3093',
     'memoAdmin.defaultTemplate': '\u30c7\u30d5\u30a9\u30eb\u30c8',
+    'memoAdmin.builtinTemplate': '\u30d3\u30eb\u30c8\u30a4\u30f3',
+    'memoAdmin.defaultTemplateHint': '\u65b0\u898f\u30e1\u30e2\u30fb\u30af\u30a4\u30c3\u30af\u30e1\u30e2\u3067\u4f7f\u7528',
     'memoAdmin.templateFile': '\u30d5\u30a1\u30a4\u30eb',
     'memoAdmin.templateSize': '\u30b5\u30a4\u30ba',
     'memoAdmin.templatesEmpty': '\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u306b .md \u30d5\u30a1\u30a4\u30eb\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
-    'memoAdmin.welcomeTitle': 'Memo Life For You \u3078\u3088\u3046\u3053\u305d\uff01',
-    'memoAdmin.welcomeDesc': '\u30e1\u30e2\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u8a2d\u5b9a\u3057\u3066\u3001\u30ce\u30fc\u30c8\u306e\u6574\u7406\u3092\u59cb\u3081\u307e\u3057\u3087\u3046\u3002\u4e0a\u306e\u8a2d\u5b9a\u30d1\u30cd\u30eb\u304b\u3089\u8a2d\u5b9a\u3067\u304d\u307e\u3059\u3002',
-    'memoAdmin.step1Title': '\u30e1\u30e2\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u8a2d\u5b9a',
-    'memoAdmin.step1Desc': '\u4e0a\u306e\u8a2d\u5b9a\u30d1\u30cd\u30eb\u3092\u958b\u3044\u3066\u3001\u30e1\u30e2\u306e\u4fdd\u5b58\u5148\u30d1\u30b9\u3092\u6307\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
-    'memoAdmin.step2Title': '\u6700\u521d\u306e\u30e1\u30e2\u3092\u4f5c\u6210',
-    'memoAdmin.step2Desc': '\u300c\u65b0\u898f\u30e1\u30e2\u300d\u30dc\u30bf\u30f3\u307e\u305f\u306f\u30b3\u30de\u30f3\u30c9\u30d1\u30ec\u30c3\u30c8\u304b\u3089\u300cMemo: New\u300d\u3092\u5b9f\u884c\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
-    'memoAdmin.step3Title': '\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u3068\u30b9\u30cb\u30da\u30c3\u30c8\u3092\u30ab\u30b9\u30bf\u30de\u30a4\u30ba',
-    'memoAdmin.step3Desc': '\u30e1\u30e2\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u5185\u306e .templates/ \u306b .md \u30d5\u30a1\u30a4\u30eb\u3001.snippets/ \u306b\u30b9\u30cb\u30da\u30c3\u30c8JSON\u3092\u914d\u7f6e\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    'memoAdmin.changeDir': '\u5909\u66f4',
+    'memoAdmin.setDefault': '\u65e2\u5b9a\u306b\u8a2d\u5b9a',
+    'memoAdmin.defaultLabel': '\u65e2\u5b9a',
+    'memoAdmin.welcomeTitle': 'Memo Life For You へようこそ！',
+    'memoAdmin.slide1Desc': 'まず、メモを保存するフォルダを選びましょう。ノート、テンプレート、スニペットはすべてここに保存されます。',
+    'memoAdmin.pickMemoDir': 'メモフォルダを選択...',
+    'memoAdmin.slide1Hint': 'あとから設定で変更できます。',
+    'memoAdmin.step2Title': '最初のメモを作成',
+    'memoAdmin.slide2Desc': 'メモは日付で整理されるMarkdownファイルです。今すぐ作成するか、スキップしてあとで作成できます。',
+    'memoAdmin.createFirstMemo': 'メモを作成する',
+    'memoAdmin.step3Title': 'テンプレートとスニペットをカスタマイズ',
+    'memoAdmin.slide3Desc': '.memo/templates/ に.mdファイルを置くと新規メモのテンプレートに、.memo/snippets/ にスニペットJSONを置くとクイック挿入に使えます。どちらもメモフォルダ内に自動作成されます。',
+    'memoAdmin.getStarted': 'はじめる！',
+    'memoAdmin.prev': '戻る',
+    'memoAdmin.next': '次へ',
+    'memoAdmin.skipSetup': 'セットアップをスキップ',
+    'memoAdmin.openWorkspace': 'ワークスペースを開く',
+    'memoAdmin.later': 'あとで',
+    'memoAdmin.openWorkspacePrompt': 'メモフォルダの準備ができました ({0})。新しいウィンドウでワークスペースを開きますか？',
 };
 
 const JA_TIPS: string[] = [

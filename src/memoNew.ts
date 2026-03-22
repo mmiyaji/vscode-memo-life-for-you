@@ -7,7 +7,7 @@ import * as randomEmoji from 'node-emoji';
 import * as dateFns from 'date-fns';
 import * as nls from 'vscode-nls';
 import * as os from 'os';
-import { items, memoConfigure } from './memoConfigure';
+import { items, memoConfigure, BUILTIN_TEMPLATE_CONTENT } from './memoConfigure';
 import * as Mustache from 'mustache';
 import { ensureMemoDateDirectory } from './memoPath';
 
@@ -23,7 +23,7 @@ export class memoNew extends memoConfigure  {
      * New
      */
     public async New() {
-        this.readConfig();
+        this.updateConfiguration();
 
         let file: string;
 
@@ -132,7 +132,7 @@ export class memoNew extends memoConfigure  {
      * QuickNew
      */
     public QuickNew() {
-        this.readConfig();
+        this.updateConfiguration();
 
         const targetDir = ensureMemoDateDirectory(this.memodir, this.memoDatePathFormat);
         let file: string = upath.normalize(upath.join(targetDir, dateFns.format(new Date(), 'yyyy-MM-dd') + ".md"));
@@ -223,11 +223,17 @@ export class memoNew extends memoConfigure  {
      * memoTemplate
      */
     private memoTemplate(title: string, date: string, templatePath?: string): string {
-        const tpl = templatePath || this.memotemplate;
-        if (!tpl) {
-            return "# " + `${date}` + " " + `${title}` + os.EOL + os.EOL;
+        const tpl = templatePath || this.resolveDefaultTemplatePath();
+        let content: string;
+        if (tpl) {
+            try {
+                content = fs.readFileSync(tpl).toString();
+            } catch {
+                content = BUILTIN_TEMPLATE_CONTENT;
+            }
+        } else {
+            content = BUILTIN_TEMPLATE_CONTENT;
         }
-        const content = fs.readFileSync(tpl).toString();
         const params = {
             ".Title": title,
             ".Date": date
@@ -242,7 +248,7 @@ export class memoNew extends memoConfigure  {
     private async pickTemplate(): Promise<string | undefined> {
         const templatesDir = this.memoTemplatesDir
             ? upath.normalize(this.memoTemplatesDir)
-            : upath.normalize(upath.join(this.memodir, '.templates'));
+            : upath.normalize(upath.join(this.memodir, this.memoMetaDir, 'templates'));
         if (!fs.existsSync(templatesDir)) {
             return undefined;
         }

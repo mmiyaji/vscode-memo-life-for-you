@@ -552,6 +552,11 @@
             "default": false,
             "description": "%memoAdminUseGradient.desc%"
           },
+          "memo-life-for-you.memoAdminAdvancedMode": {
+            "type": "boolean",
+            "default": false,
+            "description": "%memoAdminAdvancedMode.desc%"
+          },
           "memo-life-for-you.memoAdminOpenMode": {
             "type": "string",
             "enum": [
@@ -572,7 +577,20 @@
             "items": {
               "type": "string"
             },
+            "markdownDeprecationMessage": "Pinned files are now stored in `.memo-index.json`. Existing entries will be migrated automatically.",
             "description": "%memoPinnedFiles.desc%"
+          },
+          "memo-life-for-you.memoRecentCount": {
+            "type": "number",
+            "default": 8,
+            "minimum": 0,
+            "maximum": 50,
+            "description": "%memoRecentCount.desc%"
+          },
+          "memo-life-for-you.memoMetaDir": {
+            "type": "string",
+            "default": ".memo",
+            "description": "%memoMetaDir.desc%"
           }
         }
       },
@@ -669,12 +687,6 @@
             "description": "%aiTlsCaCert.desc%"
           }
         }
-      }
-    ],
-    "snippets": [
-      {
-        "language": "markdown",
-        "path": "./snippets/markdown.json"
       }
     ]
   },

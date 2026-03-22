@@ -19,7 +19,7 @@ export class memoOpenFolder extends memoConfigure {
      * Open Dir
      */
     public OpenDir() {
-        this.readConfig();
+        this.updateConfiguration();
         let folderUrl = vscode.Uri.file(this.memodir);
         vscode.commands.executeCommand("vscode.openFolder", folderUrl, true);
     }

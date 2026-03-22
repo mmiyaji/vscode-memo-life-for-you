@@ -17,7 +17,7 @@ export class memoOpenChrome extends memoConfigure {
      * Open Chrome
      */
     public async OpenChrome() {
-        this.readConfig();
+        this.updateConfiguration();
 
         // await vscode.commands.executeCommand('markdown.showPreviewToSide').then(() => {
         // // await vscode.commands.executeCommand('markdown-preview-enhanced.openPreview').then(() => {

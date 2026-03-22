@@ -39,8 +39,7 @@ export class memoRedate extends memoConfigure {
         let activeFilename = vscode.Uri.file(vscode.window.activeTextEditor.document.fileName);
         // console.log(activeFilename.fsPath);
 
-        // this.memodir を扱うために readConfig() を実行
-        this.readConfig();
+        this.updateConfiguration();
 
         // vscode.Uri.fsPath は lowercase で、Node.js は Upercase でドライブ名を返してくるので、lowercase に変換して比較する
         if ((process.platform == "win32" ? upath.dirname(activeFilename.fsPath).toLowerCase() : upath.dirname(activeFilename.fsPath)) !== (process.platform == "win32" ? upath.normalize(this.memodir).toLowerCase() : upath.normalize(this.memodir))) {

@@ -54,7 +54,7 @@ export class memoGrep extends memoConfigure {
         let child: cp.ChildProcess;
 
         const rgPath = this.resolveRipgrepPath();
-        this.readConfig();
+        this.updateConfiguration();
         const grepViewMode = this.getNormalizedGrepViewMode();
 
         const searchRoot = await this.pickSearchRoot();

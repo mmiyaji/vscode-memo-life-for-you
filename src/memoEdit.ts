@@ -21,7 +21,7 @@ export class memoEdit extends memoConfigure {
      * Edit
      */
     public async Edit() {
-        this.readConfig();
+        this.updateConfiguration();
         let items: items[] = [];
         let memodir = upath.normalizeTrim(this.memodir);
         let list: string[] = [];

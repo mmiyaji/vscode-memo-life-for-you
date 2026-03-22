@@ -46,7 +46,7 @@ export class memoTodo extends memoConfigure  {
             rgPath = upath.normalize(upath.join(vscode.env.appRoot, "node_modules", "vscode-ripgrep", "bin", "rg"));
         }
 
-        this.readConfig();
+        this.updateConfiguration();
 
         // todo-tree.regex
         // keyword = vscode.workspace.getConfiguration('todo-tree').get<string>('regex');

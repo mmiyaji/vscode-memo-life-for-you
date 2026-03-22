@@ -158,7 +158,7 @@ async function findWebviewFrame(win: Page, retries = 10): Promise<Frame | null> 
                         return body !== null && (
                             body.hasAttribute('data-appearance') ||
                             body.querySelector('.card-toggle') !== null ||
-                            body.querySelector('.welcome-card') !== null
+                            body.querySelector('.welcome-overlay') !== null
                         );
                     });
                     if (hasContent) {
@@ -193,7 +193,7 @@ test.describe('Admin Panel - Welcome Screen', () => {
         workspace?.cleanup();
     });
 
-    test('opens Admin panel and shows welcome screen', async () => {
+    test('opens Admin panel and shows welcome carousel', async () => {
         await openAdminPanel(window, electronApp);
         await window.screenshot({ path: 'e2e/screenshots/admin-welcome.png' });
 
@@ -201,15 +201,53 @@ test.describe('Admin Panel - Welcome Screen', () => {
         expect(frame, 'Webview frame should be found').toBeTruthy();
         if (!frame) return;
 
-        await window.screenshot({ path: 'e2e/screenshots/admin-welcome-detail.png' });
+        await window.screenshot({ path: 'e2e/screenshots/admin-welcome-step1.png' });
 
-        // Welcome card should be visible as an actual DOM element
-        const welcomeCards = await frame.locator('.welcome-card').count();
-        expect(welcomeCards).toBeGreaterThan(0);
+        // Carousel overlay should be visible
+        const overlay = await frame.locator('.welcome-overlay').count();
+        expect(overlay).toBe(1);
 
-        // Check 3 setup steps exist as actual elements
-        const stepCount = await frame.locator('.welcome-step').count();
-        expect(stepCount).toBe(3);
+        // Check 3 carousel slides exist
+        const slideCount = await frame.locator('.carousel-slide').count();
+        expect(slideCount).toBe(3);
+
+        // First slide should be active
+        const activeSlide = await frame.locator('.carousel-slide.active').getAttribute('data-slide');
+        expect(activeSlide).toBe('0');
+
+        // Check dots
+        const dotCount = await frame.locator('.carousel-dot').count();
+        expect(dotCount).toBe(3);
+
+        // Navigate to step 2 (use evaluate to avoid iframe pointer intercept)
+        await frame.evaluate(() => document.getElementById('carouselNext')!.click());
+        await window.waitForTimeout(1000);
+        await window.screenshot({ path: 'e2e/screenshots/admin-welcome-step2.png' });
+
+        const step2Active = await frame.locator('.carousel-slide.active').getAttribute('data-slide');
+        expect(step2Active).toBe('1');
+
+        // Verify step 2 title text
+        const step2Title = await frame.locator('.carousel-slide.active .slide-title').textContent();
+        console.log('Step 2 title:', step2Title);
+
+        // Navigate to step 3
+        await frame.evaluate(() => document.getElementById('carouselNext')!.click());
+        await window.waitForTimeout(1000);
+        await window.screenshot({ path: 'e2e/screenshots/admin-welcome-step3.png' });
+
+        const step3Active = await frame.locator('.carousel-slide.active').getAttribute('data-slide');
+        expect(step3Active).toBe('2');
+
+        // Verify step 3 title text
+        const step3Title = await frame.locator('.carousel-slide.active .slide-title').textContent();
+        console.log('Step 3 title:', step3Title);
+
+        // Navigate back
+        await frame.evaluate(() => document.getElementById('carouselPrev')!.click());
+        await window.waitForTimeout(500);
+        const backToStep2 = await frame.locator('.carousel-slide.active').getAttribute('data-slide');
+        expect(backToStep2).toBe('1');
     });
 });
 
@@ -239,6 +277,20 @@ test.describe('Admin Panel - Normal View', () => {
         if (!frame) return;
 
         await window.screenshot({ path: 'e2e/screenshots/admin-normal-detail.png' });
+
+        // Scroll down in the webview to capture lower sections
+        await frame.evaluate(() => window.scrollBy(0, 800));
+        await window.waitForTimeout(500);
+        await window.screenshot({ path: 'e2e/screenshots/admin-normal-scrolled.png' });
+
+        // Scroll further for advanced sections
+        await frame.evaluate(() => window.scrollBy(0, 800));
+        await window.waitForTimeout(500);
+        await window.screenshot({ path: 'e2e/screenshots/admin-normal-bottom.png' });
+
+        // Scroll back to top
+        await frame.evaluate(() => window.scrollTo(0, 0));
+        await window.waitForTimeout(300);
 
         // Should NOT show welcome card as an actual element
         const welcomeCards = await frame.locator('.welcome-card').count();
