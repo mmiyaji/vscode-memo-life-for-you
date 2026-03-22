@@ -1,6 +1,6 @@
 {
-  "name": "memo-life-for-you-admin",
-  "displayName": "Memo Life For You Admin",
+  "name": "vscode-memobox",
+  "displayName": "MemoBox",
   "description": "Daily memo workflow for VS Code with date-based folders, search tools, and a memo admin dashboard.",
   "version": "0.6.3",
   "publisher": "mmiyaji",
@@ -25,13 +25,13 @@
     "virtualWorkspaces": true
   },
   "icon": "media/icon.png",
-  "homepage": "https://github.com/mmiyaji/vscode-memo-life-for-you",
+  "homepage": "https://github.com/mmiyaji/vscode-memobox",
   "bugs": {
-    "url": "https://github.com/mmiyaji/vscode-memo-life-for-you/issues"
+    "url": "https://github.com/mmiyaji/vscode-memobox/issues"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mmiyaji/vscode-memo-life-for-you"
+    "url": "https://github.com/mmiyaji/vscode-memobox"
   },
   "activationEvents": [
     "onStartupFinished"
@@ -68,12 +68,12 @@
         "title": "%extension.memoQuick.title%"
       },
       {
-        "when": "!config.memo-life-for-you.withRespectMode",
+        "when": "!config.memobox.withRespectMode",
         "command": "extension.memoGrep",
         "title": "%extension.memoGrep.title%"
       },
       {
-        "when": "config.memo-life-for-you.withRespectMode",
+        "when": "config.memobox.withRespectMode",
         "command": "extension.memoGrep",
         "title": "%extension.memoGrep.title%",
         "icon": {
@@ -84,11 +84,6 @@
       {
         "command": "extension.memoConfig",
         "title": "%extension.memoConfig.title%"
-      },
-      {
-        "when": "!config.memo-life-for-you.memoPath",
-        "command": "extension.memoServe",
-        "title": "%extension.memoServe.title%"
       },
       {
         "command": "extension.memoReDate",
@@ -105,10 +100,6 @@
       {
         "command": "extension.memoOpenChrome",
         "title": "%extension.memoOpenChrome.title%"
-      },
-      {
-        "command": "extension.memoOpenTypora",
-        "title": "%extension.memoOpenTypora.title%"
       },
       {
         "command": "extension.memoAdmin",
@@ -190,62 +181,57 @@
     "menus": {
       "commandPalette": [
         {
-          "command": "extension.memoOpenTypora",
-          "title": "%extension.memoOpenTypora.title%",
-          "when": "isMac"
-        },
-        {
           "command": "extension.memoAdmin",
           "title": "%extension.memoAdmin.title%"
         },
         {
           "command": "extension.memoAutoTag",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoSummarize",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoRelated",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoExtractTodos",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoReport",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoProofread",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoQA",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoSuggestTemplate",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoGenerateTitle",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoTranslate",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoLinkSuggest",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         }
       ],
       "editor/title": [
         {
-          "when": "config.memo-life-for-you.withRespectMode",
+          "when": "config.memobox.withRespectMode",
           "command": "extension.memoEdit",
           "alt": "extension.memoGrep",
           "group": "navigation@1120"
@@ -282,57 +268,57 @@
         {
           "command": "extension.memoAutoTag",
           "group": "2_ai@1",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoSummarize",
           "group": "2_ai@2",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoGenerateTitle",
           "group": "2_ai@3",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoProofread",
           "group": "2_ai@4",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoTranslate",
           "group": "2_ai@5",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoQA",
           "group": "2_ai@6",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoRelated",
           "group": "3_ai_multi@1",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoLinkSuggest",
           "group": "3_ai_multi@2",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoExtractTodos",
           "group": "3_ai_multi@3",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoReport",
           "group": "3_ai_multi@4",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         },
         {
           "command": "extension.memoSuggestTemplate",
           "group": "3_ai_multi@5",
-          "when": "config.memo-life-for-you.aiEnabled"
+          "when": "config.memobox.aiEnabled"
         }
       ]
     },
@@ -340,32 +326,17 @@
       {
         "title": "%config.group.general%",
         "properties": {
-          "memo-life-for-you.memodir": {
+          "memobox.memodir": {
             "type": "string",
             "default": "",
             "description": "%memodir.desc%"
           },
-          "memo-life-for-you.memotemplate": {
+          "memobox.memotemplate": {
             "type": "string",
             "default": "",
             "description": "%memotemplate.desc%"
           },
-          "memo-life-for-you.memoPath": {
-            "type": "string",
-            "default": "",
-            "description": "%memoPath.desc%"
-          },
-          "memo-life-for-you.memoconfdir": {
-            "type": "string",
-            "default": "",
-            "description": "%memoConfDir.desc%"
-          },
-          "memo-life-for-you.serve-addr": {
-            "type": "string",
-            "default": "8080",
-            "description": "%serve-addr.desc%"
-          },
-          "memo-life-for-you.memoDisplayLanguage": {
+          "memobox.memoDisplayLanguage": {
             "type": "string",
             "enum": [
               "auto",
@@ -380,52 +351,52 @@
       {
         "title": "%config.group.newMemo%",
         "properties": {
-          "memo-life-for-you.titlePrefix": {
+          "memobox.titlePrefix": {
             "type": "string",
             "default": "## ",
             "description": "%titlePrefix.desc%"
           },
-          "memo-life-for-you.dateFormat": {
+          "memobox.dateFormat": {
             "type": "string",
             "default": "yyyy-MM-dd HH:mm",
             "description": "%dateFormat.desc%"
           },
-          "memo-life-for-you.insertISOWeek": {
+          "memobox.insertISOWeek": {
             "type": "boolean",
             "default": false,
             "description": "%insertISOWeek.desc%"
           },
-          "memo-life-for-you.insertEmoji": {
+          "memobox.insertEmoji": {
             "type": "boolean",
             "default": false,
             "description": "%insertEmoji.desc%"
           },
-          "memo-life-for-you.memoNewFilenameFromClipboard": {
+          "memobox.memoNewFilenameFromClipboard": {
             "type": "boolean",
             "default": false,
             "description": "%memoNewFilenameFromClipboard.desc%"
           },
-          "memo-life-for-you.memoNewFilenameFromSelection": {
+          "memobox.memoNewFilenameFromSelection": {
             "type": "boolean",
             "default": false,
             "description": "%memoNewFilenameFromSelection.desc%"
           },
-          "memo-life-for-you.memoNewFilNameDateSuffix": {
+          "memobox.memoNewFilNameDateSuffix": {
             "type": "string",
             "default": "",
             "description": "%memoNewFilNameDateSuffix.desc%"
           },
-          "memo-life-for-you.memoTemplatesDir": {
+          "memobox.memoTemplatesDir": {
             "type": "string",
             "default": "",
             "description": "%memoTemplatesDir.desc%"
           },
-          "memo-life-for-you.memoSnippetsDir": {
+          "memobox.memoSnippetsDir": {
             "type": "string",
             "default": "",
             "description": "%memoSnippetsDir.desc%"
           },
-          "memo-life-for-you.memoDatePathFormat": {
+          "memobox.memoDatePathFormat": {
             "type": "string",
             "default": "",
             "description": "%memoDatePathFormat.desc%"
@@ -435,7 +406,7 @@
       {
         "title": "%config.group.listEdit%",
         "properties": {
-          "memo-life-for-you.listSortOrder": {
+          "memobox.listSortOrder": {
             "type": "string",
             "enum": [
               "filename",
@@ -445,12 +416,12 @@
             "default": "filename",
             "description": "%listSortOrder.desc%"
           },
-          "memo-life-for-you.displayFileBirthTime": {
+          "memobox.displayFileBirthTime": {
             "type": "boolean",
             "default": false,
             "description": "%displayFileBirthTime.desc%"
           },
-          "memo-life-for-you.listDisplayExtname": {
+          "memobox.listDisplayExtname": {
             "type": "array",
             "default": [
               "md",
@@ -458,7 +429,7 @@
             ],
             "description": "%memolistDisplayExtname.desc%"
           },
-          "memo-life-for-you.listMarkdownPreview": {
+          "memobox.listMarkdownPreview": {
             "type": "boolean",
             "default": false,
             "description": "%openMarkdownPreview.desc%"
@@ -468,7 +439,7 @@
       {
         "title": "%config.group.grep%",
         "properties": {
-          "memo-life-for-you.memoGrepViewMode": {
+          "memobox.memoGrepViewMode": {
             "type": "string",
             "enum": [
               "quickPick",
@@ -479,42 +450,42 @@
             "default": "quickPick",
             "description": "%memoGrepViewMode.desc%"
           },
-          "memo-life-for-you.gutterIconPath": {
+          "memobox.gutterIconPath": {
             "type": "string",
             "default": "",
             "description": "%gutterIconPath.desc%"
           },
-          "memo-life-for-you.gutterIconSize": {
+          "memobox.gutterIconSize": {
             "type": "string",
             "default": "100%",
             "description": "%gutterIconSize.desc%"
           },
-          "memo-life-for-you.withRespectMode": {
+          "memobox.withRespectMode": {
             "type": "boolean",
             "default": false,
             "description": "%withRespectMode.desc%"
           },
-          "memo-life-for-you.grepLineBackgroundColor": {
+          "memobox.grepLineBackgroundColor": {
             "type": "string",
             "default": "rgba(201, 9, 38, 0.3)",
             "description": "%grepLineBackgroundColor.desc%"
           },
-          "memo-life-for-you.grepKeywordBackgroundColor": {
+          "memobox.grepKeywordBackgroundColor": {
             "type": "string",
             "default": "rgba(255, 255, 255, 0.4)",
             "description": "%grepKeywordBackgroundColor.desc%"
           },
-          "memo-life-for-you.memoGrepUseRipGrepConfigFile": {
+          "memobox.memoGrepUseRipGrepConfigFile": {
             "type": "boolean",
             "default": false,
             "description": "%memoGrepUseRipGrepConfigFile.desc%"
           },
-          "memo-life-for-you.memoGrepUseRipGrepConfigFilePath": {
+          "memobox.memoGrepUseRipGrepConfigFilePath": {
             "type": "string",
             "default": "",
             "description": "%memoGrepUseRipGrepConfigFilePath.desc%"
           },
-          "memo-life-for-you.memoTodoUserePattern": {
+          "memobox.memoTodoUserePattern": {
             "type": "string",
             "default": "^.*@todo.*?:",
             "description": "%memoTodoUserePattern.desc%"
@@ -524,7 +495,7 @@
       {
         "title": "%config.group.admin%",
         "properties": {
-          "memo-life-for-you.memoAdminAppearance": {
+          "memobox.memoAdminAppearance": {
             "type": "string",
             "enum": [
               "system",
@@ -534,7 +505,7 @@
             "default": "system",
             "description": "%memoAdminAppearance.desc%"
           },
-          "memo-life-for-you.memoAdminColorTheme": {
+          "memobox.memoAdminColorTheme": {
             "type": "string",
             "enum": [
               "blue",
@@ -547,17 +518,17 @@
             "default": "blue",
             "description": "%memoAdminColorTheme.desc%"
           },
-          "memo-life-for-you.memoAdminUseGradient": {
+          "memobox.memoAdminUseGradient": {
             "type": "boolean",
             "default": false,
             "description": "%memoAdminUseGradient.desc%"
           },
-          "memo-life-for-you.memoAdminAdvancedMode": {
+          "memobox.memoAdminAdvancedMode": {
             "type": "boolean",
             "default": false,
             "description": "%memoAdminAdvancedMode.desc%"
           },
-          "memo-life-for-you.memoAdminOpenMode": {
+          "memobox.memoAdminOpenMode": {
             "type": "string",
             "enum": [
               "currentWindow",
@@ -566,30 +537,30 @@
             "default": "currentWindow",
             "markdownDescription": "%memoAdminOpenMode.desc%"
           },
-          "memo-life-for-you.memoAdminOpenOnStartup": {
+          "memobox.memoAdminOpenOnStartup": {
             "type": "boolean",
             "default": false,
             "markdownDescription": "%memoAdminOpenOnStartup.desc%"
           },
-          "memo-life-for-you.memoPinnedFiles": {
+          "memobox.memoPinnedFiles": {
             "type": "array",
             "default": [],
             "items": {
               "type": "string"
             },
-            "markdownDeprecationMessage": "Pinned files are now stored in `.memo-index.json`. Existing entries will be migrated automatically.",
+            "markdownDeprecationMessage": "Pinned files are now stored in `.vscode-memobox/index.json`. Existing entries will be migrated automatically.",
             "description": "%memoPinnedFiles.desc%"
           },
-          "memo-life-for-you.memoRecentCount": {
+          "memobox.memoRecentCount": {
             "type": "number",
             "default": 8,
             "minimum": 0,
             "maximum": 50,
             "description": "%memoRecentCount.desc%"
           },
-          "memo-life-for-you.memoMetaDir": {
+          "memobox.memoMetaDir": {
             "type": "string",
-            "default": ".memo",
+            "default": ".vscode-memobox",
             "description": "%memoMetaDir.desc%"
           }
         }
@@ -597,12 +568,12 @@
       {
         "title": "%config.group.markdownPreview%",
         "properties": {
-          "memo-life-for-you.openMarkdownPreview": {
+          "memobox.openMarkdownPreview": {
             "type": "boolean",
             "default": false,
             "description": "%openMarkdownPreview.desc%"
           },
-          "memo-life-for-you.openMarkdownPreviewUseMPE": {
+          "memobox.openMarkdownPreviewUseMPE": {
             "type": "boolean",
             "default": false,
             "description": "%openMarkdownPreviewUseMPE.desc%"
@@ -612,27 +583,22 @@
       {
         "title": "%config.group.externalTools%",
         "properties": {
-          "memo-life-for-you.openChromeCustomizeURL": {
+          "memobox.openChromeCustomizeURL": {
             "type": "string",
             "default": "data:text/html, <html contenteditable>",
             "description": "%openChromeCustomizeURL.desc%"
-          },
-          "memo-life-for-you.TyporaExecPath": {
-            "type": "string",
-            "default": "",
-            "description": "%openTyporaExecPath.desc%"
           }
         }
       },
       {
         "title": "%config.group.ai%",
         "properties": {
-          "memo-life-for-you.aiEnabled": {
+          "memobox.aiEnabled": {
             "type": "boolean",
             "default": false,
             "description": "%aiEnabled.desc%"
           },
-          "memo-life-for-you.aiProvider": {
+          "memobox.aiProvider": {
             "type": "string",
             "default": "ollama",
             "enum": [
@@ -641,22 +607,22 @@
             ],
             "description": "%aiProvider.desc%"
           },
-          "memo-life-for-you.aiEndpoint": {
+          "memobox.aiEndpoint": {
             "type": "string",
             "default": "http://localhost:11434",
             "description": "%aiEndpoint.desc%"
           },
-          "memo-life-for-you.aiModel": {
+          "memobox.aiModel": {
             "type": "string",
             "default": "qwen3:1.7b",
             "description": "%aiModel.desc%"
           },
-          "memo-life-for-you.aiApiKey": {
+          "memobox.aiApiKey": {
             "type": "string",
             "default": "",
             "description": "%aiApiKey.desc%"
           },
-          "memo-life-for-you.aiTagLanguage": {
+          "memobox.aiTagLanguage": {
             "type": "string",
             "default": "auto",
             "enum": [
@@ -666,22 +632,22 @@
             ],
             "description": "%aiTagLanguage.desc%"
           },
-          "memo-life-for-you.aiProxy": {
+          "memobox.aiProxy": {
             "type": "string",
             "default": "",
             "description": "%aiProxy.desc%"
           },
-          "memo-life-for-you.aiProxyBypass": {
+          "memobox.aiProxyBypass": {
             "type": "string",
             "default": "",
             "description": "%aiProxyBypass.desc%"
           },
-          "memo-life-for-you.aiTlsRejectUnauthorized": {
+          "memobox.aiTlsRejectUnauthorized": {
             "type": "boolean",
             "default": true,
             "description": "%aiTlsRejectUnauthorized.desc%"
           },
-          "memo-life-for-you.aiTlsCaCert": {
+          "memobox.aiTlsCaCert": {
             "type": "string",
             "default": "",
             "description": "%aiTlsCaCert.desc%"
@@ -734,11 +700,9 @@
   "dependencies": {
     "chrome-launcher": "^1.2.1",
     "date-fns": "^4.1.0",
-    "fs-extra": "^11.2.0",
     "gray-matter": "^4.0.3",
     "mustache": "^4.2.0",
     "node-emoji": "^1.11.0",
-    "tomlify-j0.4": "^3.0.0",
     "upath": "^2.0.1",
     "vscode-nls": "^5.2.0"
   }

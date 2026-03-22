@@ -50,6 +50,13 @@ export class memoAdmin extends memoConfigure {
         return memoAdmin.memoIndex?.getAllTags() ?? [];
     }
 
+    public static getRecommendedMemoDir(): string {
+        if (process.platform === 'win32' || process.platform === 'darwin') {
+            return upath.join(os.homedir(), 'Documents', 'memobox');
+        }
+        return upath.join(os.homedir(), 'memobox');
+    }
+
     public async initializeIndex(context: vscode.ExtensionContext): Promise<void> {
         memoAdmin.extensionPath = context.extensionPath;
         this.updateConfiguration();
@@ -70,7 +77,7 @@ export class memoAdmin extends memoConfigure {
             const target = (vscode.workspace.workspaceFolders?.length ?? 0) > 0
                 ? vscode.ConfigurationTarget.Workspace
                 : vscode.ConfigurationTarget.Global;
-            await vscode.workspace.getConfiguration('memo-life-for-you').update('memoPinnedFiles', undefined, target);
+            await vscode.workspace.getConfiguration('memobox').update('memoPinnedFiles', undefined, target);
         }
     }
 
@@ -136,9 +143,6 @@ export class memoAdmin extends memoConfigure {
                             vscode.window.showErrorMessage(localize('memoAdmin.openFolderFailed', 'Failed to open the memo root in the file explorer'));
                         }
                         break;
-                    case 'openConfig':
-                        await vscode.commands.executeCommand('extension.memoConfig');
-                        break;
                     case 'newMemo':
                         await vscode.commands.executeCommand('extension.memoNew');
                         break;
@@ -180,7 +184,7 @@ export class memoAdmin extends memoConfigure {
                         }
                         break;
                     case 'openSettings':
-                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:mmiyaji.memo-life-for-you-admin memo-life-for-you');
+                        await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:mmiyaji.vscode-memobox memobox');
                         break;
                     case 'openKeyboardShortcuts':
                         await vscode.commands.executeCommand('workbench.action.openGlobalKeybindings');
@@ -250,10 +254,10 @@ export class memoAdmin extends memoConfigure {
                                 }
                             ],
                             settings: {
-                                'memo-life-for-you.memoAdminOpenOnStartup': true,
-                                'memo-life-for-you.memoAdminOpenMode': 'currentWindow',
-                                'memo-life-for-you.memoTemplatesDir': upath.join(this.memodir, this.memoMetaDir, 'templates'),
-                                'memo-life-for-you.memoSnippetsDir': upath.join(this.memodir, this.memoMetaDir, 'snippets'),
+                                'memobox.memoAdminOpenOnStartup': true,
+                                'memobox.memoAdminOpenMode': 'currentWindow',
+                                'memobox.memoTemplatesDir': upath.join(this.memodir, this.memoMetaDir, 'templates'),
+                                'memobox.memoSnippetsDir': upath.join(this.memodir, this.memoMetaDir, 'snippets'),
                                 'markdown.copyFiles.destination': {
                                     '*': 'assets/${isoTime/^(\\d+)-(\\d+)-(\\d+)T(\\d+):(\\d+):(\\d+).+/$1$2$3-$4$5$6/}.${fileExtName}'
                                 },
@@ -261,7 +265,7 @@ export class memoAdmin extends memoConfigure {
                             },
                             extensions: {
                                 recommendations: [
-                                    'mmiyaji.memo-life-for-you-admin',
+                                    'mmiyaji.vscode-memobox',
                                     'yzhang.markdown-all-in-one',
                                     'mmiyaji.vscode-undotree'
                                 ]
@@ -284,7 +288,7 @@ export class memoAdmin extends memoConfigure {
                             return;
                         }
 
-                        const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+                        const cfg = vscode.workspace.getConfiguration('memobox');
                         await cfg.update('memodir', message.memodir, vscode.ConfigurationTarget.Global);
                         if (message.memoDatePathFormat) {
                             await cfg.update('memoDatePathFormat', message.memoDatePathFormat, vscode.ConfigurationTarget.Global);
@@ -308,7 +312,7 @@ export class memoAdmin extends memoConfigure {
                             const dirPath = picked[0].fsPath;
                             // Suppress re-render during carousel to keep overlay visible
                             memoAdmin.suppressConfigRender = true;
-                            const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+                            const cfg = vscode.workspace.getConfiguration('memobox');
                             await cfg.update('memodir', dirPath, vscode.ConfigurationTarget.Global);
                             this.updateConfiguration();
                             this.scaffoldMemoFolders(dirPath);
@@ -322,14 +326,7 @@ export class memoAdmin extends memoConfigure {
                     case 'setDefaultMemoDir': {
                         // Set default memodir if not yet configured
                         if (!this.memodir || this.memodir === '.') {
-                            let defaultDir: string;
-                            if (process.platform === 'win32') {
-                                defaultDir = upath.join(os.homedir(), 'Documents', 'memo');
-                            } else if (process.platform === 'darwin') {
-                                defaultDir = upath.join(os.homedir(), 'Documents', 'memo');
-                            } else {
-                                defaultDir = upath.join(os.homedir(), 'memo');
-                            }
+                            const defaultDir: string = (message.dir && message.dir.trim()) || memoAdmin.getRecommendedMemoDir();
                             // Create memo directory and scaffold templates/snippets
                             if (!fs.existsSync(defaultDir)) {
                                 fs.mkdirSync(defaultDir, { recursive: true });
@@ -344,10 +341,10 @@ export class memoAdmin extends memoConfigure {
                                         { path: '.', name: 'MEMO' }
                                     ],
                                     settings: {
-                                        'memo-life-for-you.memoAdminOpenOnStartup': true,
-                                        'memo-life-for-you.memoAdminOpenMode': 'currentWindow',
-                                        'memo-life-for-you.memoTemplatesDir': upath.join(defaultDir, this.memoMetaDir, 'templates'),
-                                        'memo-life-for-you.memoSnippetsDir': upath.join(defaultDir, this.memoMetaDir, 'snippets'),
+                                        'memobox.memoAdminOpenOnStartup': true,
+                                        'memobox.memoAdminOpenMode': 'currentWindow',
+                                        'memobox.memoTemplatesDir': upath.join(defaultDir, this.memoMetaDir, 'templates'),
+                                        'memobox.memoSnippetsDir': upath.join(defaultDir, this.memoMetaDir, 'snippets'),
                                         'markdown.copyFiles.destination': {
                                             '*': 'assets/${isoTime/^(\\d+)-(\\d+)-(\\d+)T(\\d+):(\\d+):(\\d+).+/$1$2$3-$4$5$6/}.${fileExtName}'
                                         },
@@ -355,7 +352,7 @@ export class memoAdmin extends memoConfigure {
                                     },
                                     extensions: {
                                         recommendations: [
-                                            'mmiyaji.memo-life-for-you-admin',
+                                            'mmiyaji.vscode-memobox',
                                             'yzhang.markdown-all-in-one',
                                             'mmiyaji.vscode-undotree'
                                         ]
@@ -364,11 +361,19 @@ export class memoAdmin extends memoConfigure {
                                 fs.writeFileSync(workspacePath, `${workspaceContent}\n`, 'utf8');
                             }
 
-                            const cfgW = vscode.workspace.getConfiguration('memo-life-for-you');
+                            memoAdmin.suppressConfigRender = true;
+                            const cfgW = vscode.workspace.getConfiguration('memobox');
                             await cfgW.update('memodir', defaultDir, vscode.ConfigurationTarget.Global);
+                            this.updateConfiguration();
+                            memoAdmin.suppressConfigRender = false;
+                            if (message.command === 'setDefaultMemoDir') {
+                                panel.webview.postMessage({ command: 'setMemoDir', value: defaultDir });
+                                panel.webview.postMessage({ command: 'memoDirSet' });
+                                break;
+                            }
                         }
 
-                        // Always refresh and re-render after welcome finishes
+                        // Always refresh and re-render after welcome finishes (finishWelcome)
                         this.updateConfiguration();
                         await this.initializeIndex(context);
                         this.renderPanel(panel, context);
@@ -406,7 +411,7 @@ export class memoAdmin extends memoConfigure {
                             openLabel: localize('memoAdmin.pickTemplatesDir', 'Select templates folder')
                         });
                         if (picked?.[0]) {
-                            await vscode.workspace.getConfiguration('memo-life-for-you').update('memoTemplatesDir', picked[0].fsPath, vscode.ConfigurationTarget.Global);
+                            await vscode.workspace.getConfiguration('memobox').update('memoTemplatesDir', picked[0].fsPath, vscode.ConfigurationTarget.Global);
                             this.updateConfiguration();
                             this.renderPanel(panel, context);
                         }
@@ -424,7 +429,7 @@ export class memoAdmin extends memoConfigure {
                             openLabel: localize('memoAdmin.pickSnippetsDir', 'Select snippets folder')
                         });
                         if (picked?.[0]) {
-                            await vscode.workspace.getConfiguration('memo-life-for-you').update('memoSnippetsDir', picked[0].fsPath, vscode.ConfigurationTarget.Global);
+                            await vscode.workspace.getConfiguration('memobox').update('memoSnippetsDir', picked[0].fsPath, vscode.ConfigurationTarget.Global);
                             this.updateConfiguration();
                             this.renderPanel(panel, context);
                         }
@@ -432,7 +437,7 @@ export class memoAdmin extends memoConfigure {
                     }
                     case 'setDefaultTemplate': {
                         if (message.templatePath && fs.existsSync(message.templatePath)) {
-                            await vscode.workspace.getConfiguration('memo-life-for-you').update('memotemplate', message.templatePath, vscode.ConfigurationTarget.Global);
+                            await vscode.workspace.getConfiguration('memobox').update('memotemplate', message.templatePath, vscode.ConfigurationTarget.Global);
                             this.updateConfiguration();
                             this.renderPanel(panel, context);
                             vscode.window.showInformationMessage(localize('memoAdmin.defaultTemplateSet', 'Default template set to: {0}', upath.basename(message.templatePath)));
@@ -506,7 +511,7 @@ export class memoAdmin extends memoConfigure {
             });
 
             const configListener = vscode.workspace.onDidChangeConfiguration((event) => {
-                if (event.affectsConfiguration('memo-life-for-you') && !memoAdmin.suppressConfigRender) {
+                if (event.affectsConfiguration('memobox') && !memoAdmin.suppressConfigRender) {
                     this.renderPanel(panel, context);
                 }
             });
@@ -955,11 +960,12 @@ export class memoAdmin extends memoConfigure {
         }
 
         const extensionVersion = context.extension.packageJSON.version;
-        const repositoryUrl = 'https://github.com/mmiyaji/vscode-memo-life-for-you';
-        const upstreamUrl = 'https://github.com/satokaz/vscode-memo-life-for-you';
+        const repositoryUrl = 'https://github.com/mmiyaji/vscode-memobox';
+        const upstreamUrl = 'https://github.com/satokaz/vscode-memobox';
         const locale = this.getDisplayLanguage();
         const indexStatus = memoAdmin.memoIndex?.getStatus();
         const hasValidMemoDir = !!safeMemoDir && safeMemoDir !== '.' && fs.existsSync(safeMemoDir);
+        const recommendedDir = memoAdmin.getRecommendedMemoDir();
         const effectiveAppearance = this.getEffectiveAppearance();
         const appearanceLabel = this.getAppearanceLabel(this.memoAdminAppearance, locale);
         const colorThemeLabel = this.getColorThemeLabel(this.memoAdminColorTheme, locale);
@@ -1721,6 +1727,21 @@ export class memoAdmin extends memoConfigure {
             color: var(--muted);
             margin-top: 4px;
         }
+        .setup-path-row {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto 8px;
+        }
+        .setup-path-input {
+            flex: 1;
+            font-size: 13px;
+            padding: 6px 10px;
+        }
+        .setup-use-btn {
+            min-width: 160px;
+        }
         .carousel-nav {
             display: flex;
             align-items: center;
@@ -2398,10 +2419,14 @@ export class memoAdmin extends memoConfigure {
                     <!-- Step 1: Memo directory -->
                     <div class="carousel-slide active" data-slide="0">
                         <div class="slide-icon">&#128194;</div>
-                        <h2 class="slide-title">${t('memoAdmin.welcomeTitle', 'Welcome to Memo Life For You!')}</h2>
+                        <h2 class="slide-title">${t('memoAdmin.welcomeTitle', 'Welcome to MemoBox!')}</h2>
                         <p class="slide-desc">${t('memoAdmin.slide1Desc', 'First, choose a folder to store your memos. All your notes, templates, and snippets will live here.')}</p>
                         <div class="slide-action">
-                            <button class="primary" data-command="pickMemoDir">${t('memoAdmin.pickMemoDir', 'Choose memo folder...')}</button>
+                            <div class="setup-path-row">
+                                <input class="field-input setup-path-input" id="setupMemoDirInput" type="text" value="${escapeHtml(recommendedDir)}" />
+                                <button class="secondary" data-command="pickMemoDir">${t('memoAdmin.browse', 'Browse')}</button>
+                            </div>
+                            <button class="primary setup-use-btn" id="setupUseRecommended">${t('memoAdmin.useThisFolder', 'Use this folder')}</button>
                             <span class="slide-hint">${t('memoAdmin.slide1Hint', 'You can change this later in settings.')}</span>
                         </div>
                     </div>
@@ -2418,7 +2443,7 @@ export class memoAdmin extends memoConfigure {
                     <div class="carousel-slide" data-slide="2">
                         <div class="slide-icon">&#128640;</div>
                         <h2 class="slide-title">${t('memoAdmin.step3Title', 'Customize templates & snippets')}</h2>
-                        <p class="slide-desc">${t('memoAdmin.slide3Desc', 'Place .md files in .memo/templates/ for new-memo templates, and snippet JSON in .memo/snippets/ for quick insertion. Both are auto-created in your memo folder.')}</p>
+                        <p class="slide-desc">${t('memoAdmin.slide3Desc', 'Place .md files in .vscode-memobox/templates/ for new-memo templates, and snippet JSON in .vscode-memobox/snippets/ for quick insertion. Both are auto-created in your memo folder.')}</p>
                         <div class="slide-action">
                             <button class="primary" data-command="closeWelcome">${t('memoAdmin.getStarted', 'Get started!')}</button>
                         </div>
@@ -2662,7 +2687,7 @@ export class memoAdmin extends memoConfigure {
                 ${repositoryUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(repositoryUrl)}"><svg class="link-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path></svg><span>${t('memoAdmin.repoLink', 'GitHub/mmiyaji')}</span></button>` : ''}
             </div>
             <div class="footer-note">
-                ${t('memoAdmin.forkedFrom', 'forked from')} ${upstreamUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(upstreamUrl)}">satokaz/vscode-memo-life-for-you</button>` : ''}
+                ${t('memoAdmin.forkedFrom', 'forked from')} ${upstreamUrl ? `<button class="link-button" type="button" data-link="${escapeHtml(upstreamUrl)}">satokaz/vscode-memobox</button>` : ''}
             </div>
             <div class="version">v${escapeHtml(String(extensionVersion))}</div>
         </footer>
@@ -2958,6 +2983,16 @@ export class memoAdmin extends memoConfigure {
             const closeBtn = overlay.querySelector('[data-command="closeWelcome"]');
             if (closeBtn) closeBtn.addEventListener('click', (e) => { e.stopPropagation(); finishWelcome(); });
 
+            // "Use this folder" button — sends the path from the input field
+            const useBtn = document.getElementById('setupUseRecommended');
+            const setupInput = document.getElementById('setupMemoDirInput');
+            if (useBtn && setupInput) {
+                useBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    vscode.postMessage({ command: 'setDefaultMemoDir', dir: setupInput.value.trim() });
+                });
+            }
+
             // pickMemoDir in carousel — after folder is picked, auto-advance to step 2
             const pickBtn = overlay.querySelector('[data-command="pickMemoDir"]');
             if (pickBtn) {
@@ -2988,7 +3023,10 @@ export class memoAdmin extends memoConfigure {
         window.addEventListener('message', (event) => {
             const message = event.data;
             if (message.command === 'setMemoDir') {
-                document.getElementById('memodir').value = message.value;
+                const memodirEl = document.getElementById('memodir');
+                if (memodirEl) memodirEl.value = message.value;
+                const setupEl = document.getElementById('setupMemoDirInput');
+                if (setupEl) setupEl.value = message.value;
             }
         });
     </script>
@@ -2997,7 +3035,6 @@ export class memoAdmin extends memoConfigure {
     }
 
     private renderPanel(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): void {
-        this.updateConfiguration();
         this.updateConfiguration();
         panel.title = this.translate(this.getDisplayLanguage(), 'extension.memoAdmin.title', 'Memo Admin');
 
@@ -3256,15 +3293,6 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.indexFlushTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u4eca\u3059\u3050\u30c7\u30a3\u30b9\u30af\u306b\u4fdd\u5b58\u3057\u307e\u3059',
     'memoAdmin.indexRebuild': '\u518d\u69cb\u7bc9',
     'memoAdmin.indexRebuildTooltip': '\u30a4\u30f3\u30c7\u30c3\u30af\u30b9\u3092\u524a\u9664\u3057\u3066\u6700\u521d\u304b\u3089\u4f5c\u308a\u76f4\u3057\u307e\u3059',
-    'memoAdmin.tomlFallbackWarning': '\u4e00\u90e8\u306e\u8a2d\u5b9a\u304c config.toml \u304b\u3089\u8aad\u307f\u8fbc\u307e\u308c\u3066\u3044\u307e\u3059\u3002VS Code \u8a2d\u5b9a\u306b\u79fb\u884c\u3059\u308b\u3068\u7ba1\u7406\u304c\u7c21\u5358\u306b\u306a\u308a\u307e\u3059\u3002',
-    'memoAdmin.migrateNow': '\u4eca\u3059\u3050\u79fb\u884c',
-    'memoAdmin.tomlPath': '\u30d5\u30a1\u30a4\u30eb',
-    'memoAdmin.tomlStatus': '\u30b9\u30c6\u30fc\u30bf\u30b9',
-    'memoAdmin.tomlInUse': '\u30d5\u30a9\u30fc\u30eb\u30d0\u30c3\u30af\u4e2d',
-    'memoAdmin.tomlNotUsed': '\u672a\u4f7f\u7528',
-    'memoAdmin.migrateToVscode': 'VS Code \u8a2d\u5b9a\u306b\u79fb\u884c',
-    'memoAdmin.migrateTooltip': 'config.toml \u306e\u5024\u3092 VS Code \u8a2d\u5b9a\u306b\u30b3\u30d4\u30fc\u3057\u307e\u3059',
-    'memoAdmin.openConfigTooltip': 'config.toml \u3092\u30a8\u30c7\u30a3\u30bf\u3067\u958b\u304d\u307e\u3059',
     'memoAdmin.calendar': '\u30ab\u30ec\u30f3\u30c0\u30fc',
     'memoAdmin.calendarCaption': '\u65e5\u5225\u30e1\u30e2\u6d3b\u52d5',
     'memoAdmin.calPrev': '\u524d\u3078',
@@ -3294,15 +3322,16 @@ const JA_MESSAGES: Record<string, string> = {
     'memoAdmin.changeDir': '\u5909\u66f4',
     'memoAdmin.setDefault': '\u65e2\u5b9a\u306b\u8a2d\u5b9a',
     'memoAdmin.defaultLabel': '\u65e2\u5b9a',
-    'memoAdmin.welcomeTitle': 'Memo Life For You へようこそ！',
+    'memoAdmin.welcomeTitle': 'MemoBox へようこそ！',
     'memoAdmin.slide1Desc': 'まず、メモを保存するフォルダを選びましょう。ノート、テンプレート、スニペットはすべてここに保存されます。',
+    'memoAdmin.useThisFolder': 'このフォルダを使う',
     'memoAdmin.pickMemoDir': 'メモフォルダを選択...',
-    'memoAdmin.slide1Hint': 'あとから設定で変更できます。',
+    'memoAdmin.slide1Hint': 'パスを直接編集するか「参照」で別のフォルダを選べます。あとから設定で変更も可能です。',
     'memoAdmin.step2Title': '最初のメモを作成',
     'memoAdmin.slide2Desc': 'メモは日付で整理されるMarkdownファイルです。今すぐ作成するか、スキップしてあとで作成できます。',
     'memoAdmin.createFirstMemo': 'メモを作成する',
     'memoAdmin.step3Title': 'テンプレートとスニペットをカスタマイズ',
-    'memoAdmin.slide3Desc': '.memo/templates/ に.mdファイルを置くと新規メモのテンプレートに、.memo/snippets/ にスニペットJSONを置くとクイック挿入に使えます。どちらもメモフォルダ内に自動作成されます。',
+    'memoAdmin.slide3Desc': '.vscode-memobox/templates/ に.mdファイルを置くと新規メモのテンプレートに、.vscode-memobox/snippets/ にスニペットJSONを置くとクイック挿入に使えます。どちらもメモフォルダ内に自動作成されます。',
     'memoAdmin.getStarted': 'はじめる！',
     'memoAdmin.prev': '戻る',
     'memoAdmin.next': '次へ',

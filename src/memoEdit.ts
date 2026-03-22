@@ -124,7 +124,7 @@ export class memoEdit extends memoConfigure {
             }
         }
 
-        // "memo-life-for-you.listSortOrder" で sort 対象の項目を指定
+        // "memobox.listSortOrder" で sort 対象の項目を指定
         // sort 結果は常に新しいものが上位にくる降順
         switch (this.memoListSortOrder) {
             case "filename":

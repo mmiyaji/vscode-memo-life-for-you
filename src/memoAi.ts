@@ -25,7 +25,7 @@ interface AiConfig {
 }
 
 function getAiConfig(): AiConfig {
-    const config = vscode.workspace.getConfiguration('memo-life-for-you');
+    const config = vscode.workspace.getConfiguration('memobox');
     return {
         provider: config.get<AiProvider>('aiProvider', 'ollama'),
         endpoint: config.get<string>('aiEndpoint', 'http://localhost:11434'),

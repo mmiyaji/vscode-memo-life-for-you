@@ -32,7 +32,15 @@ export class memoNew extends memoConfigure  {
         let editor = vscode.window.activeTextEditor;
 
         if(!this.memodir) {
-            vscode.window.showErrorMessage(localize('memodirCheck', 'memodir is not set in config.toml'));
+            const openAdmin = localize('memodirOpenAdmin', 'Open Setup');
+            vscode.window.showErrorMessage(
+                localize('memodirCheck', 'memodir is not set. Configure it in VS Code settings.'),
+                openAdmin
+            ).then(choice => {
+                if (choice === openAdmin) {
+                    vscode.commands.executeCommand('extension.memoAdmin');
+                }
+            });
             return;
         }
 

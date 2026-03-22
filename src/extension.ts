@@ -1,21 +1,16 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import * as upath from 'upath';
 import * as nls from 'vscode-nls';
 import { memoConfigure } from './memoConfigure';
-import { memoInit }from './memoInit';
 import { memoNew } from './memoNew';
 import { memoEdit } from './memoEdit';
 import { memoGrep } from './memoGrep';
-import { memoConfig } from './memoConfigEditor';
 import { memoRedate } from './memoRedate';
 import { memoTodo } from './memoTodo';
-import { memoServe } from './memoServe';
 import { memoOpenFolder } from './memoOpenFolder';
 import { memoOpenChrome } from './memoOpenChrome';
-import { memoOpenTypora } from './memoOpenTypora';
 import { memoAdmin } from './memoAdmin';
 import { MemoSnippetProvider } from './memoSnippets';
 import { memoAutoTag, memoSummarize, memoRelated, memoExtractTodos, memoReport, memoProofread, memoQA, memoSuggestTemplate, memoGenerateTitle, memoTranslate, memoLinkSuggest } from './memoAi';
@@ -25,12 +20,11 @@ import { memoAutoTag, memoSummarize, memoRelated, memoExtractTodos, memoReport, 
 // const localize = nls.config({ messageFormat: nls.MessageFormat.file })();
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Congratulations, your extension "memo-life-for-you-admin" is now active!');
+    console.log('Congratulations, your extension "vscode-memobox" is now active!');
     // console.log(vscode.env);
     // console.log(path.normalize(path.join(vscode.env.appRoot, "node_modules", "vscode-ripgrep", "bin", "rg")));
     // console.log('vscode.Markdown =', vscode.extensions.getExtension("Microsoft.vscode-markdown").extensionPath);
 
-    new memoInit();
     let memoedit = new memoEdit();
     let memogrep = new memoGrep();
     let memoadmin = new memoAdmin();
@@ -43,13 +37,11 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoQuick", () => new memoNew().QuickNew()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoEdit", () => memoedit.Edit()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoGrep", () => memogrep.Grep()));
-    context.subscriptions.push(vscode.commands.registerCommand("extension.memoConfig", () => new memoConfig().Config()));
-    context.subscriptions.push(vscode.commands.registerCommand("extension.memoServe", () => new memoServe().Serve()));
+    context.subscriptions.push(vscode.commands.registerCommand("extension.memoConfig", () => vscode.commands.executeCommand('workbench.action.openSettings', 'memobox')));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoReDate", () => new memoRedate().reDate()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoTodo", () => new memoTodo().TodoGrep()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenFolder", () => new memoOpenFolder().OpenDir()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenChrome", () => new memoOpenChrome().OpenChrome()));
-    context.subscriptions.push(vscode.commands.registerCommand("extension.memoOpenTypora", () => new memoOpenTypora().OpenTypora()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoAutoTag", () => memoAutoTag(memoAdmin.getAllTags())));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoSummarize", () => memoSummarize()));
     context.subscriptions.push(vscode.commands.registerCommand("extension.memoRelated", () => {
@@ -117,22 +109,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     void restorePendingMemoAdmin(context, memoadmin);
     void openMemoAdminOnStartup(context, memoadmin);
-
-    // First-launch: auto-open Admin with welcome carousel
-    {
-        const setupComplete = context.globalState.get<boolean>('memo.setupComplete', false);
-        if (!setupComplete) {
-            const cfg = new memoConfigure();
-            const hasMemoDir = cfg.memodir && cfg.memodir.trim() !== '' && cfg.memodir !== '.' && fs.existsSync(cfg.memodir);
-            if (!hasMemoDir) {
-                setTimeout(() => {
-                    void memoadmin.Show(context);
-                }, 500);
-            }
-            // Mark setup as complete regardless — only auto-open once
-            void context.globalState.update('memo.setupComplete', true);
-        }
-    }
 
     // vscode.commands.registerCommand('favorites.refresh', () => treeViewProvider.refresh());
 

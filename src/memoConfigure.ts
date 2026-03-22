@@ -18,7 +18,7 @@ export interface items extends vscode.QuickPickItem {
 }
 
 /** Default name of the hidden metadata directory inside memodir */
-export const MEMO_META_DIR_DEFAULT = '.memo';
+export const MEMO_META_DIR_DEFAULT = '.vscode-memobox';
 
 /** Built-in default template content (Mustache format) */
 export const BUILTIN_TEMPLATE_CONTENT = '# {{.Date}} {{.Title}}\n\n';
@@ -26,11 +26,8 @@ export const BUILTIN_TEMPLATE_CONTENT = '# {{.Date}} {{.Title}}\n\n';
 export class memoConfigure {
     public _onDidChange = new vscode.EventEmitter<vscode.Uri>();
     public _waiting: boolean;
-    public memopath: string;
-    public memoaddr: string;
     public memodir: string;
     public memotemplate: string;
-    public memoconfdir: string;
     public memoTitlePrefix: string;
     public memoDateFormat: string;
     public memoISOWeek = false;
@@ -68,7 +65,6 @@ export class memoConfigure {
     public memoMetaDir: string;
     public openMarkdownPreviewUseMPE: boolean;
     public memoOpenChromeCustomizeURL: string;
-    public memoTyporaExecPath: string;
     public memoListDisplayExtname: string[];
 
     public options: vscode.QuickPickOptions = {
@@ -84,40 +80,25 @@ export class memoConfigure {
     };
 
     constructor() {
-        this.setMemoConfDir();
-        this.applyMemoConfDirSetting();
         this.updateConfiguration();
         this._waiting = false;
 
         vscode.workspace.onDidChangeConfiguration(() => {
-            this.applyMemoConfDirSetting();
             this.updateConfiguration();
         });
     }
 
-    public setMemoConfDir() {
-        if (process.platform === "win32") {
-            this.memoconfdir = process.env.APPDATA;
-            if (this.memoconfdir === "") {
-                this.memoconfdir = upath.normalize(upath.join(process.env.USERPROFILE, "Application Data", "memo"));
-            }
-            this.memoconfdir = upath.normalize(upath.join(this.memoconfdir, "memo"));
-        } else {
-            this.memoconfdir = upath.normalize(upath.join(process.env.HOME, ".config", "memo"));
-        }
-        return void 0;
-    }
-
-    private applyMemoConfDirSetting() {
-        const userConfDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoconfdir');
-        if (userConfDir && userConfDir.trim() !== '') {
-            this.memoconfdir = upath.normalize(userConfDir.trim());
-        }
-    }
-
     public checkMemoDir() {
         if (!this.memodir) {
-            vscode.window.showErrorMessage(localize('memodirCheck', 'memodir is not set. Configure it in VS Code settings.'));
+            const openAdmin = localize('memodirOpenAdmin', 'Open Setup');
+            vscode.window.showErrorMessage(
+                localize('memodirCheck', 'memodir is not set. Configure it in VS Code settings.'),
+                openAdmin
+            ).then(choice => {
+                if (choice === openAdmin) {
+                    vscode.commands.executeCommand('extension.memoAdmin');
+                }
+            });
             return;
         }
 
@@ -130,58 +111,55 @@ export class memoConfigure {
     }
 
     public updateConfiguration() {
-        const cfg = vscode.workspace.getConfiguration('memo-life-for-you');
+        const cfg = vscode.workspace.getConfiguration('memobox');
         this.memodir = upath.normalizeTrim((cfg.get<string>('memodir') || '').trim());
         const rawTemplate = (cfg.get<string>('memotemplate') || '').trim();
         this.memotemplate = rawTemplate ? upath.normalizeTrim(rawTemplate) : '';
         this.memoDatePathFormat = (cfg.get<string>('memoDatePathFormat') || '').trim();
-        this.memopath = upath.normalize(vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoPath'));
-        this.memoaddr = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('serve-addr');
-        this.memoTitlePrefix = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('titlePrefix');
-        this.memoDateFormat = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('dateFormat');
-        this.memoISOWeek = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('insertISOWeek');
-        this.memoEmoji = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('insertEmoji');
-        this.memoGutterIconPath = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('gutterIconPath');
-        this.memoGutterIconSize = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('gutterIconSize');
-        this.memoWithRespectMode = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('withRespectMode');
-        this.memoEditDispBtime = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('displayFileBirthTime');
-        this.memoGrepLineBackgroundColor = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('grepLineBackgroundColor');
-        this.memoGrepKeywordBackgroundColor = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('grepKeywordBackgroundColor');
-        this.memoEditPreviewMarkdown = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('listMarkdownPreview');
-        this.memoEditOpenMarkdown = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openMarkdownPreview');
-        this.memoEditOpenNewInstance = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openNewInstance');
-        this.memoListSortOrder = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('listSortOrder');
-        this.memoGrepOrder = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('grepOrder');
-        this.memoGrepViewMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoGrepViewMode');
-        this.memoGrepUseRipGrepConfigFile = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoGrepUseRipGrepConfigFile');
-        this.memoGrepUseRipGrepConfigFilePath = vscode.workspace.getConfiguration('memo-life-for-you').inspect<string>('memoGrepUseRipGrepConfigFilePath').globalValue;
-        this.memoTodoUserePattern = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoTodoUserePattern');
-        this.memoNewFilenameFromClipboard = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoNewFilenameFromClipboard');
-        this.memoNewFilenameFromSelection = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoNewFilenameFromSelection');
-        this.memoNewFilNameDateSuffix = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoNewFilNameDateSuffix');
-        this.memoTemplatesDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoTemplatesDir');
-        this.memoSnippetsDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoSnippetsDir');
-        this.memoAdminAppearance = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminAppearance');
-        this.memoAdminColorTheme = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminColorTheme');
-        this.memoDisplayLanguage = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoDisplayLanguage');
-        this.memoAdminUseGradient = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminUseGradient');
-        this.memoAdminAdvancedMode = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminAdvancedMode');
-        this.memoAdminOpenMode = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoAdminOpenMode');
-        this.memoAdminOpenOnStartup = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('memoAdminOpenOnStartup');
-        this.memoPinnedFiles = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('memoPinnedFiles');
-        this.memoRecentCount = vscode.workspace.getConfiguration('memo-life-for-you').get<number>('memoRecentCount', 8);
-        this.memoMetaDir = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('memoMetaDir', MEMO_META_DIR_DEFAULT) || MEMO_META_DIR_DEFAULT;
-        this.openMarkdownPreviewUseMPE = vscode.workspace.getConfiguration('memo-life-for-you').get<boolean>('openMarkdownPreviewUseMPE');
-        this.memoOpenChromeCustomizeURL = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('openChromeCustomizeURL');
-        this.memoTyporaExecPath = vscode.workspace.getConfiguration('memo-life-for-you').get<string>('TyporaExecPath');
-        this.memoListDisplayExtname = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('listDisplayExtname');
-        this.memoListDisplayExtname = vscode.workspace.getConfiguration('memo-life-for-you').get<string[]>('listDisplayExtname');
+        this.memoTitlePrefix = vscode.workspace.getConfiguration('memobox').get<string>('titlePrefix');
+        this.memoDateFormat = vscode.workspace.getConfiguration('memobox').get<string>('dateFormat');
+        this.memoISOWeek = vscode.workspace.getConfiguration('memobox').get<boolean>('insertISOWeek');
+        this.memoEmoji = vscode.workspace.getConfiguration('memobox').get<boolean>('insertEmoji');
+        this.memoGutterIconPath = vscode.workspace.getConfiguration('memobox').get<string>('gutterIconPath');
+        this.memoGutterIconSize = vscode.workspace.getConfiguration('memobox').get<string>('gutterIconSize');
+        this.memoWithRespectMode = vscode.workspace.getConfiguration('memobox').get<boolean>('withRespectMode');
+        this.memoEditDispBtime = vscode.workspace.getConfiguration('memobox').get<boolean>('displayFileBirthTime');
+        this.memoGrepLineBackgroundColor = vscode.workspace.getConfiguration('memobox').get<string>('grepLineBackgroundColor');
+        this.memoGrepKeywordBackgroundColor = vscode.workspace.getConfiguration('memobox').get<string>('grepKeywordBackgroundColor');
+        this.memoEditPreviewMarkdown = vscode.workspace.getConfiguration('memobox').get<boolean>('listMarkdownPreview');
+        this.memoEditOpenMarkdown = vscode.workspace.getConfiguration('memobox').get<boolean>('openMarkdownPreview');
+        this.memoEditOpenNewInstance = vscode.workspace.getConfiguration('memobox').get<boolean>('openNewInstance');
+        this.memoListSortOrder = vscode.workspace.getConfiguration('memobox').get<string>('listSortOrder');
+        this.memoGrepOrder = vscode.workspace.getConfiguration('memobox').get<string>('grepOrder');
+        this.memoGrepViewMode = vscode.workspace.getConfiguration('memobox').get<string>('memoGrepViewMode');
+        this.memoGrepUseRipGrepConfigFile = vscode.workspace.getConfiguration('memobox').get<boolean>('memoGrepUseRipGrepConfigFile');
+        this.memoGrepUseRipGrepConfigFilePath = vscode.workspace.getConfiguration('memobox').inspect<string>('memoGrepUseRipGrepConfigFilePath').globalValue;
+        this.memoTodoUserePattern = vscode.workspace.getConfiguration('memobox').get<string>('memoTodoUserePattern');
+        this.memoNewFilenameFromClipboard = vscode.workspace.getConfiguration('memobox').get<boolean>('memoNewFilenameFromClipboard');
+        this.memoNewFilenameFromSelection = vscode.workspace.getConfiguration('memobox').get<boolean>('memoNewFilenameFromSelection');
+        this.memoNewFilNameDateSuffix = vscode.workspace.getConfiguration('memobox').get<string>('memoNewFilNameDateSuffix');
+        this.memoTemplatesDir = vscode.workspace.getConfiguration('memobox').get<string>('memoTemplatesDir');
+        this.memoSnippetsDir = vscode.workspace.getConfiguration('memobox').get<string>('memoSnippetsDir');
+        this.memoAdminAppearance = vscode.workspace.getConfiguration('memobox').get<string>('memoAdminAppearance');
+        this.memoAdminColorTheme = vscode.workspace.getConfiguration('memobox').get<string>('memoAdminColorTheme');
+        this.memoDisplayLanguage = vscode.workspace.getConfiguration('memobox').get<string>('memoDisplayLanguage');
+        this.memoAdminUseGradient = vscode.workspace.getConfiguration('memobox').get<boolean>('memoAdminUseGradient');
+        this.memoAdminAdvancedMode = vscode.workspace.getConfiguration('memobox').get<boolean>('memoAdminAdvancedMode');
+        this.memoAdminOpenMode = vscode.workspace.getConfiguration('memobox').get<string>('memoAdminOpenMode');
+        this.memoAdminOpenOnStartup = vscode.workspace.getConfiguration('memobox').get<boolean>('memoAdminOpenOnStartup');
+        this.memoPinnedFiles = vscode.workspace.getConfiguration('memobox').get<string[]>('memoPinnedFiles');
+        this.memoRecentCount = vscode.workspace.getConfiguration('memobox').get<number>('memoRecentCount', 8);
+        this.memoMetaDir = vscode.workspace.getConfiguration('memobox').get<string>('memoMetaDir', MEMO_META_DIR_DEFAULT) || MEMO_META_DIR_DEFAULT;
+        this.openMarkdownPreviewUseMPE = vscode.workspace.getConfiguration('memobox').get<boolean>('openMarkdownPreviewUseMPE');
+        this.memoOpenChromeCustomizeURL = vscode.workspace.getConfiguration('memobox').get<string>('openChromeCustomizeURL');
+        this.memoListDisplayExtname = vscode.workspace.getConfiguration('memobox').get<string[]>('listDisplayExtname');
+        this.memoListDisplayExtname = vscode.workspace.getConfiguration('memobox').get<string[]>('listDisplayExtname');
     }
 
     /**
      * Resolve the effective default template path.
      * If memotemplate is explicitly set, use it.
-     * Otherwise fall back to .memo/templates/default.md (if it exists),
+     * Otherwise fall back to .vscode-memobox/templates/default.md (if it exists),
      * then to BUILTIN_TEMPLATE_CONTENT.
      */
     public resolveDefaultTemplatePath(): string {
@@ -195,16 +173,6 @@ export class memoConfigure {
             }
         }
         return '';
-    }
-
-    public ensureBuiltInTemplateFile(): string {
-        const templatePath = upath.normalize(upath.join(this.memoconfdir, 'builtin-template.md'));
-
-        if (!fs.existsSync(templatePath) || fs.readFileSync(templatePath, 'utf8') !== BUILTIN_TEMPLATE_CONTENT) {
-            fs.writeFileSync(templatePath, BUILTIN_TEMPLATE_CONTENT, 'utf8');
-        }
-
-        return templatePath;
     }
 
     get onDidChange() {
