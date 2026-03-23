@@ -16,6 +16,14 @@ function cleanTempDir(dir: string): void {
     fs.rmSync(dir, { recursive: true, force: true });
 }
 
+function perfTest(name: string, fn: () => void | Promise<void>): void {
+    if (process.env.CI) {
+        test(name, { skip: 'Skipped on CI due to runner timing variance' }, fn);
+        return;
+    }
+    test(name, fn);
+}
+
 // -- writeFileSafely standalone test (extracted logic) --
 
 async function writeFileSafely(filePath: string, data: string, encoding: BufferEncoding): Promise<void> {
@@ -206,7 +214,7 @@ function generateIndexData(count: number): IndexData {
     return { version: 1, memodir: '/memos', entries };
 }
 
-test('perf: JSON.parse + Map construction for 355 entries under 5ms', () => {
+perfTest('perf: JSON.parse + Map construction for 355 entries under 5ms', () => {
     const data = generateIndexData(355);
     const json = JSON.stringify(data);
 
@@ -219,7 +227,7 @@ test('perf: JSON.parse + Map construction for 355 entries under 5ms', () => {
     assert.ok(elapsed < 5, `355 entries: parse+map took ${elapsed.toFixed(2)}ms (expected <5ms)`);
 });
 
-test('perf: JSON.parse + Map construction for 1000 entries under 10ms', () => {
+perfTest('perf: JSON.parse + Map construction for 1000 entries under 10ms', () => {
     const data = generateIndexData(1000);
     const json = JSON.stringify(data);
 
@@ -232,7 +240,7 @@ test('perf: JSON.parse + Map construction for 1000 entries under 10ms', () => {
     assert.ok(elapsed < 10, `1000 entries: parse+map took ${elapsed.toFixed(2)}ms (expected <10ms)`);
 });
 
-test('perf: JSON.parse + Map construction for 5000 entries under 30ms', () => {
+perfTest('perf: JSON.parse + Map construction for 5000 entries under 30ms', () => {
     const data = generateIndexData(5000);
     const json = JSON.stringify(data);
 
@@ -245,7 +253,7 @@ test('perf: JSON.parse + Map construction for 5000 entries under 30ms', () => {
     assert.ok(elapsed < 30, `5000 entries: parse+map took ${elapsed.toFixed(2)}ms (expected <30ms)`);
 });
 
-test('perf: JSON.stringify for 5000 entries under 30ms', () => {
+perfTest('perf: JSON.stringify for 5000 entries under 30ms', () => {
     const data = generateIndexData(5000);
 
     const start = performance.now();
@@ -256,7 +264,7 @@ test('perf: JSON.stringify for 5000 entries under 30ms', () => {
     assert.ok(elapsed < 30, `5000 entries: stringify took ${elapsed.toFixed(2)}ms (expected <30ms)`);
 });
 
-test('perf: Map iteration + aggregation for 5000 entries under 5ms', () => {
+perfTest('perf: Map iteration + aggregation for 5000 entries under 5ms', () => {
     const entries = generateEntries(5000);
     const yearMap = new Map<string, number>();
     const monthMap = new Map<string, number>();
@@ -276,7 +284,7 @@ test('perf: Map iteration + aggregation for 5000 entries under 5ms', () => {
     assert.ok(elapsed < 5, `5000 entries: aggregation took ${elapsed.toFixed(2)}ms (expected <5ms)`);
 });
 
-test('perf: directory derivation from 5000 entries under 10ms', () => {
+perfTest('perf: directory derivation from 5000 entries under 10ms', () => {
     const entries = generateEntries(5000);
     const dirs = new Set<string>();
 
@@ -294,7 +302,7 @@ test('perf: directory derivation from 5000 entries under 10ms', () => {
     assert.ok(elapsed < 10, `5000 entries: dir derivation took ${elapsed.toFixed(2)}ms (expected <10ms)`);
 });
 
-test('perf: writeFileSafely for typical index size under 20ms', async () => {
+perfTest('perf: writeFileSafely for typical index size under 20ms', async () => {
     const dir = createTempDir();
     try {
         const data = generateIndexData(355);
@@ -312,7 +320,7 @@ test('perf: writeFileSafely for typical index size under 20ms', async () => {
     }
 });
 
-test('perf: full sync simulation — statSync 355 files vs index lookup', async () => {
+perfTest('perf: full sync simulation — statSync 355 files vs index lookup', async () => {
     const dir = createTempDir();
     try {
         // Create 355 temp files
